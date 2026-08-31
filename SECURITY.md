@@ -1,6 +1,6 @@
 # Security Policy
 
-QuotaPilot is planned as a self-hosted application that stores local runtime state and Codex authentication homes on the deployment host.
+ai-quota-monitor is planned as a self-hosted application that stores local runtime state and Codex authentication homes on the deployment host.
 
 ## Supported Versions
 

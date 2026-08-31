@@ -1,6 +1,6 @@
-# QuotaPilot
+# ai-quota-monitor
 
-QuotaPilot is a planned self-hosted monitor and scheduler for two independently authenticated ChatGPT Plus/Codex accounts.
+ai-quota-monitor is a planned self-hosted monitor and scheduler for two independently authenticated ChatGPT Plus/Codex accounts.
 
 The project goal is to make Codex usage windows visible and predictable without using OpenAI API keys, scraping ChatGPT, or storing account credentials in the application database.
 
@@ -40,7 +40,7 @@ V1 should not use React, Angular, a Node build toolchain, PostgreSQL, Redis, Cel
 
 ## Architecture
 
-QuotaPilot will use two Codex integration paths:
+ai-quota-monitor will use two Codex integration paths:
 
 - a Python SDK/runtime path for account login and anchor turns;
 - an app-server telemetry path for account and quota data, if verified as available in the installed official runtime.
@@ -48,10 +48,10 @@ QuotaPilot will use two Codex integration paths:
 Each account must have a separate Codex home and workspace:
 
 ```text
-/var/lib/quotapilot/account-a/codex-home/
-/var/lib/quotapilot/account-a/workspace/
-/var/lib/quotapilot/account-b/codex-home/
-/var/lib/quotapilot/account-b/workspace/
+/var/lib/ai-quota-monitor/account-a/codex-home/
+/var/lib/ai-quota-monitor/account-a/workspace/
+/var/lib/ai-quota-monitor/account-b/codex-home/
+/var/lib/ai-quota-monitor/account-b/workspace/
 ```
 
 The application database stores configuration, normalized telemetry, raw telemetry payloads, anchor runs, and events. It must not store OAuth tokens or account credentials.
@@ -114,7 +114,7 @@ Local development commands will be finalized in Phase 1. The expected shape is:
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
-.\.venv\Scripts\python.exe -m quotapilot
+.\.venv\Scripts\python.exe -m ai_quota_monitor
 ```
 
 The application is expected to listen on:
@@ -147,18 +147,18 @@ Planned defaults:
 | Disk | 8 GB |
 | Network | DHCP on vmbr0 |
 | Port | 8080 |
-| Hostname | quotapilot |
+| Hostname | ai-quota-monitor |
 
 Native/Proxmox runtime layout:
 
 ```text
-/opt/quotapilot/              application checkout and virtualenv
-/var/lib/quotapilot/          database, Codex homes, runtime state
-/etc/quotapilot.env           deployment configuration
+/opt/ai-quota-monitor/        application checkout and virtualenv
+/var/lib/ai-quota-monitor/    database, Codex homes, runtime state
+/etc/ai-quota-monitor.env     deployment configuration
 /etc/systemd/system/          systemd service
 ```
 
-Updates must preserve `/var/lib/quotapilot`.
+Updates must preserve `/var/lib/ai-quota-monitor`.
 
 ### Docker Compose
 
@@ -171,7 +171,7 @@ docker compose up -d
 Persistent data will live in a volume mounted at:
 
 ```text
-/var/lib/quotapilot
+/var/lib/ai-quota-monitor
 ```
 
 Docker deployments should update by pulling a newer image and restarting the container, not by mutating the running container from inside the web app.
