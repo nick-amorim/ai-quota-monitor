@@ -1,0 +1,53 @@
+name: Repository Checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate required documentation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          required = [
+              Path("README.md"),
+              Path("SECURITY.md"),
+              Path(".env.example"),
+              Path(".github/PULL_REQUEST_TEMPLATE.md"),
+          ]
+
+          missing = [str(path) for path in required if not path.exists()]
+          if missing:
+              raise SystemExit(f"Missing required files: {missing}")
+          PY
+
+      - name: Compile Python package if present
+        run: |
+          if [ -d src ]; then
+            python -m compileall -q src
+          fi
+
+      - name: Check tests if present
+        run: |
+          if [ -d tests ]; then
+            python -m pip install --upgrade pip
+            if [ -f requirements-dev.txt ]; then
+              python -m pip install -r requirements-dev.txt
+            elif [ -f pyproject.toml ]; then
+              python -m pip install -e ".[dev]"
+            fi
+            python -m pytest tests
+          fi
