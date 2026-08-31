@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-quota-monitor"
+version = "0.1.0"
+description = "Self-hosted Codex quota monitor and scheduler for two ChatGPT Plus accounts."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "alembic>=1.13,<2",
+    "apscheduler>=3.10,<4",
+    "fastapi>=0.115,<1",
+    "jinja2>=3.1,<4",
+    "pydantic-settings>=2.4,<3",
+    "sqlalchemy>=2.0,<3",
+    "uvicorn[standard]>=0.30,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx>=0.27,<1",
+    "pytest>=8,<9",
+    "pytest-cov>=5,<6",
+]
+
+[project.scripts]
+ai-quota-monitor = "ai_quota_monitor.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+ai_quota_monitor = ["templates/*.html", "static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

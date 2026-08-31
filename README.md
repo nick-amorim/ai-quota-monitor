@@ -6,9 +6,19 @@ The project goal is to make Codex usage windows visible and predictable without 
 
 ## Current Status
 
-This repository is in preparation. No runnable application has been implemented yet.
+Phase 1 skeleton is implemented.
 
 Local planning drafts may exist under `docs/`, but that directory is intentionally ignored and not tracked in Git.
+
+The current application provides:
+
+- installable Python package;
+- FastAPI app factory;
+- SQLite connection initialization;
+- `/health` endpoint;
+- dashboard shell at `/`;
+- Alembic scaffold;
+- pytest smoke tests.
 
 ## Planned Features
 
@@ -106,22 +116,60 @@ Short imperative summary
 - Verification or documentation note
 ```
 
+## Project Structure
+
+```text
+ai-quota-monitor/
+├── alembic/
+├── src/
+│   └── ai_quota_monitor/
+│       ├── __main__.py
+│       ├── config.py
+│       ├── database.py
+│       ├── main.py
+│       ├── static/
+│       └── templates/
+├── tests/
+├── pyproject.toml
+├── alembic.ini
+├── README.md
+└── SECURITY.md
+```
+
 ## Local Development
 
-Local development commands will be finalized in Phase 1. The expected shape is:
+Create a virtual environment and install the project:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+```
+
+Run tests:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+```
+
+Start the application:
+
+```powershell
 .\.venv\Scripts\python.exe -m ai_quota_monitor
 ```
 
-The application is expected to listen on:
+The application listens on:
 
 ```text
 http://127.0.0.1:8080
 ```
+
+Available routes:
+
+| Route | Purpose |
+| --- | --- |
+| `/` | Dashboard shell |
+| `/health` | JSON health check with database status |
 
 Runtime data should live in `data/` locally and must not be committed.
 
