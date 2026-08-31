@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="dashboard-shell" aria-labelledby="dashboard-title">
+  <div>
+    <h2 id="dashboard-title">Dashboard shell</h2>
+    <p>
+      Phase 1 is running. Account setup, authentication, scheduling, and live usage
+      telemetry will arrive in later phase branches.
+    </p>
+  </div>
+
+  <dl class="status-grid">
+    <div>
+      <dt>Application</dt>
+      <dd>Online</dd>
+    </div>
+    <div>
+      <dt>Database</dt>
+      <dd>Initialized</dd>
+    </div>
+    <div>
+      <dt>Timezone</dt>
+      <dd>{{ timezone }}</dd>
+    </div>
+  </dl>
+</section>
+{% endblock %}
