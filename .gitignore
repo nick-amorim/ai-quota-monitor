@@ -71,6 +71,9 @@ instance/
 # Sphinx documentation
 docs/_build/
 
+# Local planning and draft documents
+docs/
+
 # PyBuilder
 .pybuilder/
 target/
@@ -216,3 +219,21 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# QuotaPilot local runtime state
+data/
+runtime/
+logs/
+*.sqlite
+*.sqlite3
+*.db
+
+# Codex account homes and workspaces must stay local
+codex-home/
+codex-homes/
+account-a/
+account-b/
+
+# Local deployment/runtime overrides
+.env.*
+!.env.example
