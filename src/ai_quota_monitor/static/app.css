@@ -35,6 +35,7 @@ body {
 
 h1,
 h2,
+h3,
 p {
   margin-top: 0;
 }
@@ -47,6 +48,11 @@ h1 {
 
 h2 {
   font-size: 1.5rem;
+}
+
+h3 {
+  margin-bottom: 0;
+  font-size: 1.25rem;
 }
 
 main {
@@ -99,4 +105,115 @@ main {
   margin: 0.35rem 0 0;
   font-size: 1.125rem;
   font-weight: 700;
+}
+
+.account-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+  gap: 1rem;
+}
+
+.account-panel {
+  padding: 1rem;
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.account-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.account-state {
+  flex: 0 0 auto;
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  background: #e6f4ea;
+  color: #176b3a;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.schedule-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.875rem;
+}
+
+label span,
+legend {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: #3e4c59;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+input,
+select,
+button {
+  min-height: 2.5rem;
+  border-radius: 6px;
+  font: inherit;
+}
+
+input,
+select {
+  width: 100%;
+  border: 1px solid #bcccdc;
+  padding: 0.5rem 0.625rem;
+  background: #ffffff;
+  color: #1f2933;
+}
+
+fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.weekday-grid,
+.toggle-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.875rem;
+}
+
+.check-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.check-row input {
+  width: 1rem;
+  min-height: 1rem;
+}
+
+.check-row span {
+  margin-bottom: 0;
+}
+
+button {
+  justify-self: start;
+  border: 0;
+  padding: 0.55rem 0.875rem;
+  background: #1f2933;
+  color: #ffffff;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+button:hover {
+  background: #334e68;
 }

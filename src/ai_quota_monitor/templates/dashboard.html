@@ -3,10 +3,10 @@
 {% block content %}
 <section class="dashboard-shell" aria-labelledby="dashboard-title">
   <div>
-    <h2 id="dashboard-title">Dashboard shell</h2>
+    <h2 id="dashboard-title">Accounts and schedules</h2>
     <p>
-      Phase 1 is running. Account setup, authentication, scheduling, and live usage
-      telemetry will arrive in later phase branches.
+      Phase 2 seeds Account A and Account B with editable schedules. Authentication,
+      anchor execution, and live quota telemetry arrive in later phase branches.
     </p>
   </div>
 
@@ -24,5 +24,104 @@
       <dd>{{ timezone }}</dd>
     </div>
   </dl>
+
+  <div class="account-grid">
+    {% for account in accounts %}
+    <article class="account-panel">
+      <header class="account-panel__header">
+        <div>
+          <p class="eyebrow">{{ account.slug }}</p>
+          <h3>{{ account.name }}</h3>
+        </div>
+        <span class="account-state">{{ "Enabled" if account.enabled else "Paused" }}</span>
+      </header>
+
+      <form method="post" action="/accounts/{{ account.id }}/schedule" class="schedule-form">
+        <label class="check-row">
+          <input type="checkbox" name="enabled" {% if account.enabled %}checked{% endif %}>
+          <span>Account enabled</span>
+        </label>
+
+        <div class="form-grid">
+          <label>
+            <span>Daily anchor</span>
+            <input
+              type="time"
+              name="daily_anchor_time"
+              value="{{ account.schedule.daily_anchor_time.strftime('%H:%M') }}"
+              required
+            >
+          </label>
+
+          <label>
+            <span>Weekly day</span>
+            <select name="weekly_target_day" required>
+              {% for weekday in weekdays %}
+              <option
+                value="{{ weekday }}"
+                {% if account.schedule.weekly_target_day == weekday %}selected{% endif %}
+              >
+                {{ weekday | title }}
+              </option>
+              {% endfor %}
+            </select>
+          </label>
+
+          <label>
+            <span>Weekly time</span>
+            <input
+              type="time"
+              name="weekly_target_time"
+              value="{{ account.schedule.weekly_target_time.strftime('%H:%M') }}"
+              required
+            >
+          </label>
+
+          <label>
+            <span>Timezone</span>
+            <input type="text" name="timezone" value="{{ account.schedule.timezone }}" required>
+          </label>
+        </div>
+
+        <fieldset>
+          <legend>Run days</legend>
+          <div class="weekday-grid">
+            {% for weekday in weekdays %}
+            <label class="check-row">
+              <input
+                type="checkbox"
+                name="{{ weekday }}_enabled"
+                {% if account.schedule[weekday + "_enabled"] %}checked{% endif %}
+              >
+              <span>{{ weekday[:3] | title }}</span>
+            </label>
+            {% endfor %}
+          </div>
+        </fieldset>
+
+        <div class="toggle-group">
+          <label class="check-row">
+            <input
+              type="checkbox"
+              name="daily_anchor_enabled"
+              {% if account.schedule.daily_anchor_enabled %}checked{% endif %}
+            >
+            <span>Daily anchor enabled</span>
+          </label>
+          <label class="check-row">
+            <input
+              type="checkbox"
+              name="skip_if_window_active"
+              {% if account.schedule.skip_if_window_active %}checked{% endif %}
+            >
+            <span>Skip when a 5h window is active</span>
+          </label>
+        </div>
+
+        <button type="submit">Save schedule</button>
+      </form>
+    </article>
+    {% endfor %}
+  </div>
 </section>
 {% endblock %}
