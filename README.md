@@ -6,7 +6,7 @@ The project goal is to make Codex usage windows visible and predictable without 
 
 ## Current Status
 
-Phase 1 skeleton is implemented.
+Phase 2 account and schedule configuration is implemented.
 
 Local planning drafts may exist under `docs/`, but that directory is intentionally ignored and not tracked in Git.
 
@@ -16,8 +16,12 @@ The current application provides:
 - FastAPI app factory;
 - SQLite connection initialization;
 - `/health` endpoint;
-- dashboard shell at `/`;
+- dashboard at `/`;
 - Alembic scaffold;
+- account, schedule, and app settings tables;
+- Account A and Account B default seed data;
+- editable account schedule forms;
+- startup migrations before default seeding;
 - pytest smoke tests.
 
 ## Planned Features
@@ -66,6 +70,12 @@ Each account must have a separate Codex home and workspace:
 
 The application database stores configuration, normalized telemetry, raw telemetry payloads, anchor runs, and events. It must not store OAuth tokens or account credentials.
 
+Currently implemented tables:
+
+- `accounts`
+- `account_schedules`
+- `app_settings`
+
 ## Default Schedule
 
 Timezone:
@@ -82,6 +92,17 @@ Initial defaults:
 | B | 09:00 | Wednesday 09:00 |
 
 These are database defaults only. The dashboard must allow them to be changed.
+
+Implemented schedule fields:
+
+- account enabled;
+- daily anchor enabled;
+- daily anchor time;
+- weekly target day;
+- weekly target time;
+- account timezone;
+- active weekdays;
+- skip anchor when a 5-hour window is already active.
 
 ## Development Workflow
 
@@ -127,6 +148,9 @@ ai-quota-monitor/
 │       ├── config.py
 │       ├── database.py
 │       ├── main.py
+│       ├── models/
+│       ├── routes/
+│       ├── services/
 │       ├── static/
 │       └── templates/
 ├── tests/
@@ -168,10 +192,17 @@ Available routes:
 
 | Route | Purpose |
 | --- | --- |
-| `/` | Dashboard shell |
+| `/` | Account and schedule dashboard |
 | `/health` | JSON health check with database status |
+| `POST /accounts/{account_id}/schedule` | Persist account schedule changes |
 
 Runtime data should live in `data/` locally and must not be committed.
+
+Run Alembic migrations against a clean target database:
+
+```powershell
+.\.venv\Scripts\python.exe -m alembic upgrade head
+```
 
 ## Planned Deployment
 

@@ -7,17 +7,19 @@ from sqlalchemy import engine_from_config, pool
 
 from ai_quota_monitor.config import get_settings
 from ai_quota_monitor.database import ensure_sqlite_parent_dir
+from ai_quota_monitor.models import Base
 
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-target_metadata = None
+target_metadata = Base.metadata
 
 
 def get_url() -> str:
-    return get_settings().database_url
+    settings = config.attributes.get("settings") or get_settings()
+    return settings.database_url
 
 
 def run_migrations_offline() -> None:
@@ -33,7 +35,7 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    settings = get_settings()
+    settings = config.attributes.get("settings") or get_settings()
     ensure_sqlite_parent_dir(settings)
     configuration = config.get_section(config.config_ini_section, {})
     configuration["sqlalchemy.url"] = settings.database_url

@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 from pathlib import Path
+from collections.abc import Generator
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from ai_quota_monitor.config import Settings
+
+
+class Base(DeclarativeBase):
+    pass
 
 
 def create_database_engine(settings: Settings) -> Engine:
@@ -42,3 +48,13 @@ def database_is_healthy(engine: Engine) -> bool:
         return False
 
     return True
+
+
+def create_session_factory(engine: Engine) -> sessionmaker[Session]:
+    return sessionmaker(bind=engine, expire_on_commit=False)
+
+
+def get_session(request) -> Generator[Session, None, None]:
+    session_factory = request.app.state.session_factory
+    with session_factory() as session:
+        yield session
