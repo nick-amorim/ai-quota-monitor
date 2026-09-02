@@ -34,6 +34,7 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 "timezone": request.app.state.settings.timezone,
                 "accounts": accounts,
                 "weekdays": WEEKDAYS,
+                "login_attempts": request.app.state.auth_manager.login_snapshots(),
             },
         )
 
@@ -61,6 +62,44 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 },
                 skip_if_window_active=_checkbox(form, "skip_if_window_active"),
             )
+
+        return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+
+    @router.post("/accounts/{account_id}/auth/device-login")
+    async def start_device_login(account_id: int, request: Request) -> RedirectResponse:
+        try:
+            request.app.state.auth_manager.start_device_login(account_id)
+        except KeyError:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from None
+        except Exception:
+            pass
+
+        return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+
+    @router.post("/accounts/{account_id}/auth/cancel")
+    async def cancel_device_login(account_id: int, request: Request) -> RedirectResponse:
+        request.app.state.auth_manager.cancel_device_login(account_id)
+        return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+
+    @router.post("/accounts/{account_id}/auth/status")
+    async def refresh_auth_status(account_id: int, request: Request) -> RedirectResponse:
+        try:
+            request.app.state.auth_manager.refresh_status(account_id)
+        except KeyError:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from None
+        except Exception:
+            pass
+
+        return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+
+    @router.post("/accounts/{account_id}/auth/logout")
+    async def logout(account_id: int, request: Request) -> RedirectResponse:
+        try:
+            request.app.state.auth_manager.logout(account_id)
+        except KeyError:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from None
+        except Exception:
+            pass
 
         return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
 

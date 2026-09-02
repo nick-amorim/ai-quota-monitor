@@ -6,7 +6,7 @@ The project goal is to make Codex usage windows visible and predictable without 
 
 ## Current Status
 
-Phase 2 account and schedule configuration is implemented.
+Phase 3 SDK authentication foundation is implemented.
 
 Local planning drafts may exist under `docs/`, but that directory is intentionally ignored and not tracked in Git.
 
@@ -21,6 +21,7 @@ The current application provides:
 - account, schedule, and app settings tables;
 - Account A and Account B default seed data;
 - editable account schedule forms;
+- Codex SDK dependency and per-account auth status controls;
 - startup migrations before default seeding;
 - pytest smoke tests.
 
@@ -37,6 +38,30 @@ The current application provides:
 - Proxmox LXC deployment.
 - Docker Compose deployment.
 - Safe update flow that preserves SQLite data and Codex authentication homes.
+
+## Codex Authentication
+
+Phase 3 adds the Codex SDK dependency and account-scoped authentication controls.
+
+The production auth backend uses the public `openai_codex` Python package and launches Codex with:
+
+- account-specific `CODEX_HOME`;
+- account-specific workspace path;
+- cleared `CODEX_API_KEY` and `OPENAI_API_KEY` values in the spawned Codex process;
+- `login_chatgpt_device_code()` for ChatGPT device-code login;
+- `account(refresh_token=False)` for status checks;
+- `logout()` for session removal.
+
+The app stores only account metadata in SQLite:
+
+- auth status;
+- account display/email when reported by Codex;
+- plan type when reported by Codex;
+- last auth check timestamp.
+
+It must not store ChatGPT passwords, browser cookies, OAuth access tokens, OAuth refresh tokens, or OpenAI API keys.
+
+If both configured accounts report the same Codex account identity, the later refreshed account is marked `duplicate_account`.
 
 ## Planned Stack
 
@@ -195,6 +220,10 @@ Available routes:
 | `/` | Account and schedule dashboard |
 | `/health` | JSON health check with database status |
 | `POST /accounts/{account_id}/schedule` | Persist account schedule changes |
+| `POST /accounts/{account_id}/auth/device-login` | Start ChatGPT device-code login |
+| `POST /accounts/{account_id}/auth/cancel` | Cancel a pending device-code login |
+| `POST /accounts/{account_id}/auth/status` | Refresh Codex account status |
+| `POST /accounts/{account_id}/auth/logout` | Clear the account's Codex session |
 
 Runtime data should live in `data/` locally and must not be committed.
 

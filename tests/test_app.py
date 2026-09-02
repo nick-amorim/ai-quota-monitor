@@ -6,6 +6,7 @@ from fastapi.templating import Jinja2Templates
 from ai_quota_monitor.config import Settings
 from ai_quota_monitor.main import create_app
 from ai_quota_monitor.routes.dashboard import register_routes
+from ai_quota_monitor.services.codex_auth import CodexAccountInfo
 
 
 def make_settings(tmp_path):
@@ -15,8 +16,36 @@ def make_settings(tmp_path):
     )
 
 
+class FakeAuthBackend:
+    def start_device_login(self, account):
+        raise AssertionError("device login not expected")
+
+    def read_account(self, account):
+        return CodexAccountInfo(
+            external_id="user@example.test",
+            display="user@example.test",
+            plan_type="plus",
+            is_authenticated=True,
+        )
+
+    def logout(self, account):
+        return None
+
+    def close_login_attempt(self, attempt):
+        return None
+
+
+class FailingAuthBackend(FakeAuthBackend):
+    def read_account(self, account):
+        raise RuntimeError("codex unavailable")
+
+
+def make_app(tmp_path):
+    return create_app(make_settings(tmp_path), auth_backend_factory=FakeAuthBackend)
+
+
 def test_health_reports_database_ok(tmp_path):
-    app = create_app(make_settings(tmp_path))
+    app = make_app(tmp_path)
 
     with TestClient(app) as client:
         response = client.get("/health")
@@ -31,7 +60,7 @@ def test_health_reports_database_ok(tmp_path):
 
 
 def test_dashboard_shell_renders(tmp_path):
-    app = create_app(make_settings(tmp_path))
+    app = make_app(tmp_path)
 
     with TestClient(app) as client:
         response = client.get("/")
@@ -41,6 +70,8 @@ def test_dashboard_shell_renders(tmp_path):
     assert "Accounts and schedules" in response.text
     assert "Account A" in response.text
     assert "Account B" in response.text
+    assert "Start device login" in response.text
+    assert "Check status" in response.text
     assert "America/Recife" in response.text
 
 
@@ -50,7 +81,8 @@ def test_database_file_is_created(tmp_path):
         Settings(
             database_url=f"sqlite:///{database_path}",
             data_dir=tmp_path,
-        )
+        ),
+        auth_backend_factory=FakeAuthBackend,
     )
 
     with TestClient(app):
@@ -96,7 +128,7 @@ def test_schedule_update_persists_after_restart(tmp_path):
 
     assert response.status_code == 303
 
-    restarted_app = create_app(settings)
+    restarted_app = create_app(settings, auth_backend_factory=FakeAuthBackend)
     with TestClient(restarted_app) as client:
         response = client.get("/")
 
@@ -104,3 +136,32 @@ def test_schedule_update_persists_after_restart(tmp_path):
     assert 'value="06:00"' in response.text
     assert 'value="friday"' in response.text
     assert 'value="America/Fortaleza"' in response.text
+
+
+def test_auth_status_route_updates_account_metadata(tmp_path):
+    app = make_app(tmp_path)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/accounts/1/auth/status",
+            follow_redirects=False,
+        )
+        dashboard = client.get("/")
+
+    assert response.status_code == 303
+    assert "user@example.test" in dashboard.text
+    assert "plus" in dashboard.text
+
+
+def test_auth_status_route_records_failure_without_error_page(tmp_path):
+    app = create_app(make_settings(tmp_path), auth_backend_factory=FailingAuthBackend)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/accounts/1/auth/status",
+            follow_redirects=False,
+        )
+        dashboard = client.get("/")
+
+    assert response.status_code == 303
+    assert "Auth Failed" in dashboard.text
