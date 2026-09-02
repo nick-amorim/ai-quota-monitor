@@ -138,6 +138,79 @@ main {
   font-weight: 700;
 }
 
+.state-stack {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+}
+
+.auth-state {
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  background: #f0f4f8;
+  color: #3e4c59;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.auth-state--connected {
+  background: #e6f4ea;
+  color: #176b3a;
+}
+
+.auth-state--login_pending {
+  background: #fff4d6;
+  color: #8a5a00;
+}
+
+.auth-state--auth_failed,
+.auth-state--duplicate_account {
+  background: #fdecea;
+  color: #9b1c1c;
+}
+
+.login-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  border: 1px solid #bcccdc;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.login-panel span,
+.account-meta {
+  color: #52616f;
+  font-size: 0.875rem;
+}
+
+.login-panel strong {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 1.25rem;
+}
+
+.login-panel a {
+  color: #1f2933;
+  font-weight: 700;
+}
+
+.account-meta {
+  margin-bottom: 1rem;
+}
+
+.auth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
 .schedule-form {
   display: grid;
   gap: 1rem;
@@ -216,4 +289,22 @@ button {
 
 button:hover {
   background: #334e68;
+}
+
+.secondary-button {
+  border: 1px solid #bcccdc;
+  background: #ffffff;
+  color: #1f2933;
+}
+
+.secondary-button:hover {
+  background: #f0f4f8;
+}
+
+.danger-button {
+  background: #9b1c1c;
+}
+
+.danger-button:hover {
+  background: #7f1d1d;
 }

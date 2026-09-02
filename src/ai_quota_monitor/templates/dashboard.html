@@ -33,8 +33,50 @@
           <p class="eyebrow">{{ account.slug }}</p>
           <h3>{{ account.name }}</h3>
         </div>
-        <span class="account-state">{{ "Enabled" if account.enabled else "Paused" }}</span>
+        <div class="state-stack">
+          <span class="account-state">{{ "Enabled" if account.enabled else "Paused" }}</span>
+          <span class="auth-state auth-state--{{ account.auth_status }}">
+            {{ account.auth_status.replace("_", " ") | title }}
+          </span>
+        </div>
       </header>
+
+      {% set login = login_attempts.get(account.id) %}
+      {% if login %}
+      <section class="login-panel" aria-label="Device login for {{ account.name }}">
+        <div>
+          <span>Device code</span>
+          <strong>{{ login.user_code }}</strong>
+        </div>
+        <a href="{{ login.verification_url }}" target="_blank" rel="noreferrer">
+          Open verification
+        </a>
+      </section>
+      {% endif %}
+
+      {% if account.account_display %}
+      <p class="account-meta">
+        Signed in as {{ account.account_display }}
+        {% if account.plan_type %}({{ account.plan_type }}){% endif %}
+      </p>
+      {% endif %}
+
+      <div class="auth-actions" aria-label="Authentication actions for {{ account.name }}">
+        <form method="post" action="/accounts/{{ account.id }}/auth/device-login">
+          <button type="submit">Start device login</button>
+        </form>
+        <form method="post" action="/accounts/{{ account.id }}/auth/status">
+          <button type="submit" class="secondary-button">Check status</button>
+        </form>
+        {% if login %}
+        <form method="post" action="/accounts/{{ account.id }}/auth/cancel">
+          <button type="submit" class="secondary-button">Cancel login</button>
+        </form>
+        {% endif %}
+        <form method="post" action="/accounts/{{ account.id }}/auth/logout">
+          <button type="submit" class="danger-button">Logout</button>
+        </form>
+      </div>
 
       <form method="post" action="/accounts/{{ account.id }}/schedule" class="schedule-form">
         <label class="check-row">

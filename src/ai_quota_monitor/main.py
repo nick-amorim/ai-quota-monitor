@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
@@ -19,12 +20,20 @@ from ai_quota_monitor.migrations import run_migrations
 from ai_quota_monitor.routes import health
 from ai_quota_monitor.routes.dashboard import register_routes
 from ai_quota_monitor.services.accounts import ensure_runtime_directories, seed_defaults
+from ai_quota_monitor.services.codex_auth import (
+    CodexAuthBackend,
+    CodexAuthManager,
+    OpenAiCodexAuthBackend,
+)
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(PACKAGE_DIR / "templates"))
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    auth_backend_factory: Callable[[], CodexAuthBackend] = OpenAiCodexAuthBackend,
+) -> FastAPI:
     app_settings = settings or get_settings()
 
     @asynccontextmanager
@@ -39,6 +48,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.settings = app_settings
         app.state.engine = engine
         app.state.session_factory = session_factory
+        app.state.auth_manager = CodexAuthManager(
+            session_factory,
+            backend_factory=auth_backend_factory,
+        )
         try:
             yield
         finally:

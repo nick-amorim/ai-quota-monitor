@@ -67,7 +67,7 @@ def seed_defaults(session: Session, settings: Settings) -> None:
         if setting is None:
             session.add(AppSetting(key=key, value=value))
 
-    data_root = settings.data_dir.expanduser()
+    data_root = settings.data_dir.expanduser().resolve()
     for seed in default_account_seeds(settings):
         account = session.scalar(select(Account).where(Account.slug == seed.slug))
         if account is None:
@@ -170,7 +170,7 @@ def update_account_schedule(
 
 
 def ensure_runtime_directories(settings: Settings) -> None:
-    data_root = settings.data_dir.expanduser()
+    data_root = settings.data_dir.expanduser().resolve()
     for seed in default_account_seeds(settings):
         account_root = data_root / seed.slug
         for path in (account_root / "codex-home", account_root / "workspace"):

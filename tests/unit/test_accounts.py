@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import time
+from pathlib import Path
 
 from ai_quota_monitor.config import Settings
 from ai_quota_monitor.database import (
@@ -97,6 +98,18 @@ def test_ensure_runtime_directories_creates_account_paths(tmp_path):
     assert (tmp_path / "account-a" / "workspace").is_dir()
     assert (tmp_path / "account-b" / "codex-home").is_dir()
     assert (tmp_path / "account-b" / "workspace").is_dir()
+
+
+def test_seed_defaults_stores_absolute_runtime_paths(tmp_path):
+    settings, engine, session_factory = make_session(tmp_path)
+
+    with session_factory() as session:
+        seed_defaults(session, settings)
+        account = list_accounts(session)[0]
+
+    assert Path(account.codex_home).is_absolute()
+    assert Path(account.workspace_path).is_absolute()
+    engine.dispose()
 
 
 def test_update_account_schedule_persists(tmp_path):
