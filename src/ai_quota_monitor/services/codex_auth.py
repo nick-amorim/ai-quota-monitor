@@ -15,6 +15,25 @@ from ai_quota_monitor.models import Account
 CODEX_API_KEY_ENV_VARS = ("CODEX_API_KEY", "OPENAI_API_KEY")
 
 
+def codex_config_for_account(account: Account):
+    from openai_codex import CodexConfig
+
+    codex_home = Path(account.codex_home).expanduser().resolve()
+    workspace_path = Path(account.workspace_path).expanduser().resolve()
+    codex_home.mkdir(parents=True, exist_ok=True)
+    workspace_path.mkdir(parents=True, exist_ok=True)
+
+    return CodexConfig(
+        cwd=str(workspace_path),
+        env={
+            "CODEX_HOME": str(codex_home),
+            **{key: "" for key in CODEX_API_KEY_ENV_VARS},
+        },
+        client_name="ai_quota_monitor",
+        client_title="ai-quota-monitor",
+    )
+
+
 @dataclass(frozen=True)
 class CodexAccountInfo:
     external_id: str | None
@@ -277,22 +296,7 @@ class OpenAiCodexAuthBackend:
             close()
 
     def _config(self, account: Account):
-        from openai_codex import CodexConfig
-
-        codex_home = Path(account.codex_home).expanduser().resolve()
-        workspace_path = Path(account.workspace_path).expanduser().resolve()
-        codex_home.mkdir(parents=True, exist_ok=True)
-        workspace_path.mkdir(parents=True, exist_ok=True)
-
-        return CodexConfig(
-            cwd=str(workspace_path),
-            env={
-                "CODEX_HOME": str(codex_home),
-                **{key: "" for key in CODEX_API_KEY_ENV_VARS},
-            },
-            client_name="ai_quota_monitor",
-            client_title="ai-quota-monitor",
-        )
+        return codex_config_for_account(account)
 
 
 class _OpenAiDeviceLoginAttempt:

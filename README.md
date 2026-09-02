@@ -6,7 +6,7 @@ The project goal is to make Codex usage windows visible and predictable without 
 
 ## Current Status
 
-Phase 3 SDK authentication foundation is implemented.
+Phase 4 manual anchor execution is implemented.
 
 Local planning drafts may exist under `docs/`, but that directory is intentionally ignored and not tracked in Git.
 
@@ -22,6 +22,7 @@ The current application provides:
 - Account A and Account B default seed data;
 - editable account schedule forms;
 - Codex SDK dependency and per-account auth status controls;
+- manual Codex anchor execution with persisted run history;
 - startup migrations before default seeding;
 - pytest smoke tests.
 
@@ -63,6 +64,41 @@ It must not store ChatGPT passwords, browser cookies, OAuth access tokens, OAuth
 
 If both configured accounts report the same Codex account identity, the later refreshed account is marked `duplicate_account`.
 
+## Anchor Execution
+
+Phase 4 adds manual anchor execution for a connected account.
+
+The production anchor backend uses the same account-scoped Codex SDK isolation as authentication:
+
+- account-specific `CODEX_HOME`;
+- account-specific workspace path;
+- cleared `CODEX_API_KEY` and `OPENAI_API_KEY` values in the spawned Codex process;
+- an ephemeral Codex thread per anchor run;
+- `Sandbox.read_only`;
+- `ApprovalMode.deny_all`.
+
+The default global anchor prompt is:
+
+```text
+Reply only with OK.
+```
+
+The prompt is stored in `app_settings` and can be edited from the dashboard.
+
+Each manual anchor run writes an `anchor_runs` record with:
+
+- account;
+- prompt;
+- status;
+- started and completed timestamps;
+- duration;
+- Codex thread and turn IDs when available;
+- final response when available;
+- token usage when reported by the SDK;
+- error message on failure.
+
+Normal automated tests use fake Codex backends and never run a real anchor turn.
+
 ## Planned Stack
 
 - Python 3.10 or newer.
@@ -99,6 +135,7 @@ Currently implemented tables:
 
 - `accounts`
 - `account_schedules`
+- `anchor_runs`
 - `app_settings`
 
 ## Default Schedule
@@ -224,6 +261,8 @@ Available routes:
 | `POST /accounts/{account_id}/auth/cancel` | Cancel a pending device-code login |
 | `POST /accounts/{account_id}/auth/status` | Refresh Codex account status |
 | `POST /accounts/{account_id}/auth/logout` | Clear the account's Codex session |
+| `POST /settings/anchor` | Update the global anchor prompt |
+| `POST /accounts/{account_id}/anchors/run` | Run one manual anchor for a connected account |
 
 Runtime data should live in `data/` locally and must not be committed.
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import time
 from urllib.parse import parse_qs
 
@@ -14,6 +15,7 @@ from ai_quota_monitor.services.accounts import (
     list_accounts,
     update_account_schedule,
 )
+from ai_quota_monitor.services.anchors import get_app_setting, update_app_setting
 
 
 def register_routes(templates: Jinja2Templates) -> APIRouter:
@@ -24,6 +26,11 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
         session_factory = request.app.state.session_factory
         with session_factory() as session:
             accounts = list_accounts(session)
+            anchor_prompt = get_app_setting(
+                session,
+                "anchor_prompt",
+                request.app.state.settings.anchor_prompt,
+            )
 
         return templates.TemplateResponse(
             request,
@@ -35,8 +42,21 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 "accounts": accounts,
                 "weekdays": WEEKDAYS,
                 "login_attempts": request.app.state.auth_manager.login_snapshots(),
+                "anchor_prompt": anchor_prompt,
+                "anchor_runs": request.app.state.anchor_service.recent_runs(limit=8),
             },
         )
+
+    @router.post("/settings/anchor")
+    async def save_anchor_settings(request: Request) -> RedirectResponse:
+        form = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
+        prompt = _required(form, "anchor_prompt")
+        session_factory = request.app.state.session_factory
+
+        with session_factory() as session:
+            update_app_setting(session, "anchor_prompt", prompt)
+
+        return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
 
     @router.post("/accounts/{account_id}/schedule")
     async def save_schedule(account_id: int, request: Request) -> RedirectResponse:
@@ -96,6 +116,20 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
     async def logout(account_id: int, request: Request) -> RedirectResponse:
         try:
             request.app.state.auth_manager.logout(account_id)
+        except KeyError:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from None
+        except Exception:
+            pass
+
+        return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+
+    @router.post("/accounts/{account_id}/anchors/run")
+    async def run_anchor(account_id: int, request: Request) -> RedirectResponse:
+        try:
+            await asyncio.to_thread(
+                request.app.state.anchor_service.run_manual_anchor,
+                account_id,
+            )
         except KeyError:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from None
         except Exception:

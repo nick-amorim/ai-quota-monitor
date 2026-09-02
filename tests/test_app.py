@@ -4,8 +4,11 @@ from fastapi.testclient import TestClient
 from fastapi.templating import Jinja2Templates
 
 from ai_quota_monitor.config import Settings
+from ai_quota_monitor.database import create_database_engine, create_session_factory
 from ai_quota_monitor.main import create_app
+from ai_quota_monitor.models import Account
 from ai_quota_monitor.routes.dashboard import register_routes
+from ai_quota_monitor.services.anchors import AnchorTurnResult
 from ai_quota_monitor.services.codex_auth import CodexAccountInfo
 
 
@@ -40,8 +43,35 @@ class FailingAuthBackend(FakeAuthBackend):
         raise RuntimeError("codex unavailable")
 
 
+class FakeAnchorBackend:
+    def run_anchor(self, account, prompt):
+        return AnchorTurnResult(
+            status="completed",
+            thread_id="thread-1",
+            turn_id="turn-1",
+            final_response="OK",
+            token_usage={"input_tokens": 3, "output_tokens": 1},
+            duration_ms=25,
+        )
+
+
 def make_app(tmp_path):
-    return create_app(make_settings(tmp_path), auth_backend_factory=FakeAuthBackend)
+    return create_app(
+        make_settings(tmp_path),
+        auth_backend_factory=FakeAuthBackend,
+        anchor_backend_factory=FakeAnchorBackend,
+    )
+
+
+def mark_account_connected(settings, account_id: int = 1) -> None:
+    engine = create_database_engine(settings)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        account = session.get(Account, account_id)
+        assert account is not None
+        account.auth_status = "connected"
+        session.commit()
+    engine.dispose()
 
 
 def test_health_reports_database_ok(tmp_path):
@@ -72,6 +102,9 @@ def test_dashboard_shell_renders(tmp_path):
     assert "Account B" in response.text
     assert "Start device login" in response.text
     assert "Check status" in response.text
+    assert "Run anchor" in response.text
+    assert "Global anchor prompt" in response.text
+    assert "No anchor runs yet." in response.text
     assert "America/Recife" in response.text
 
 
@@ -108,7 +141,11 @@ def test_schedule_update_persists_after_restart(tmp_path):
         data_dir=tmp_path,
     )
 
-    app = create_app(settings)
+    app = create_app(
+        settings,
+        auth_backend_factory=FakeAuthBackend,
+        anchor_backend_factory=FakeAnchorBackend,
+    )
     with TestClient(app) as client:
         response = client.post(
             "/accounts/1/schedule",
@@ -165,3 +202,40 @@ def test_auth_status_route_records_failure_without_error_page(tmp_path):
 
     assert response.status_code == 303
     assert "Auth Failed" in dashboard.text
+
+
+def test_anchor_prompt_update_persists(tmp_path):
+    app = make_app(tmp_path)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/settings/anchor",
+            data={"anchor_prompt": "Reply with PONG only."},
+            follow_redirects=False,
+        )
+        dashboard = client.get("/")
+
+    assert response.status_code == 303
+    assert "Reply with PONG only." in dashboard.text
+
+
+def test_manual_anchor_route_records_history(tmp_path):
+    settings = make_settings(tmp_path)
+    app = create_app(
+        settings,
+        auth_backend_factory=FakeAuthBackend,
+        anchor_backend_factory=FakeAnchorBackend,
+    )
+
+    with TestClient(app) as client:
+        mark_account_connected(settings)
+        response = client.post(
+            "/accounts/1/anchors/run",
+            follow_redirects=False,
+        )
+        dashboard = client.get("/")
+
+    assert response.status_code == 303
+    assert "Recent anchor runs" in dashboard.text
+    assert "Completed" in dashboard.text
+    assert "OK" in dashboard.text
