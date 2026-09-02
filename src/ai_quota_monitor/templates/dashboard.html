@@ -5,8 +5,8 @@
   <div>
     <h2 id="dashboard-title">Accounts and schedules</h2>
     <p>
-      Phase 2 seeds Account A and Account B with editable schedules. Authentication,
-      anchor execution, and live quota telemetry arrive in later phase branches.
+      Account setup, authentication, schedules, and manual anchor execution are available.
+      Live quota telemetry arrives in a later phase branch.
     </p>
   </div>
 
@@ -24,6 +24,20 @@
       <dd>{{ timezone }}</dd>
     </div>
   </dl>
+
+  <section class="settings-panel" aria-labelledby="anchor-settings-title">
+    <div>
+      <p class="eyebrow">Anchor execution</p>
+      <h3 id="anchor-settings-title">Global anchor prompt</h3>
+    </div>
+    <form method="post" action="/settings/anchor" class="anchor-settings-form">
+      <label>
+        <span>Prompt</span>
+        <textarea name="anchor_prompt" rows="3" required>{{ anchor_prompt }}</textarea>
+      </label>
+      <button type="submit">Save prompt</button>
+    </form>
+  </section>
 
   <div class="account-grid">
     {% for account in accounts %}
@@ -75,6 +89,17 @@
         {% endif %}
         <form method="post" action="/accounts/{{ account.id }}/auth/logout">
           <button type="submit" class="danger-button">Logout</button>
+        </form>
+      </div>
+
+      <div class="anchor-actions" aria-label="Anchor actions for {{ account.name }}">
+        <form method="post" action="/accounts/{{ account.id }}/anchors/run">
+          <button
+            type="submit"
+            {% if account.auth_status != "connected" %}disabled{% endif %}
+          >
+            Run anchor
+          </button>
         </form>
       </div>
 
@@ -165,5 +190,53 @@
     </article>
     {% endfor %}
   </div>
+
+  <section class="history-panel" aria-labelledby="anchor-history-title">
+    <div>
+      <p class="eyebrow">History</p>
+      <h3 id="anchor-history-title">Recent anchor runs</h3>
+    </div>
+
+    {% if anchor_runs %}
+    <div class="history-table-wrap">
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th scope="col">Account</th>
+            <th scope="col">Status</th>
+            <th scope="col">Started</th>
+            <th scope="col">Duration</th>
+            <th scope="col">Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for run in anchor_runs %}
+          <tr>
+            <td>{{ run.account.name if run.account else "Unknown" }}</td>
+            <td>
+              <span class="anchor-status anchor-status--{{ run.status }}">
+                {{ run.status | title }}
+              </span>
+            </td>
+            <td>{{ run.started_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+            <td>{{ (run.duration_ms ~ " ms") if run.duration_ms is not none else "-" }}</td>
+            <td>
+              {% if run.error_message %}
+                {{ run.error_message }}
+              {% elif run.final_response %}
+                {{ run.final_response }}
+              {% else %}
+                -
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="empty-state">No anchor runs yet.</p>
+    {% endif %}
+  </section>
 </section>
 {% endblock %}

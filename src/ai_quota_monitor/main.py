@@ -20,6 +20,11 @@ from ai_quota_monitor.migrations import run_migrations
 from ai_quota_monitor.routes import health
 from ai_quota_monitor.routes.dashboard import register_routes
 from ai_quota_monitor.services.accounts import ensure_runtime_directories, seed_defaults
+from ai_quota_monitor.services.anchors import (
+    AnchorService,
+    CodexAnchorBackend,
+    CodexSdkAnchorBackend,
+)
 from ai_quota_monitor.services.codex_auth import (
     CodexAuthBackend,
     CodexAuthManager,
@@ -33,6 +38,7 @@ templates = Jinja2Templates(directory=str(PACKAGE_DIR / "templates"))
 def create_app(
     settings: Settings | None = None,
     auth_backend_factory: Callable[[], CodexAuthBackend] = OpenAiCodexAuthBackend,
+    anchor_backend_factory: Callable[[], CodexAnchorBackend] = CodexSdkAnchorBackend,
 ) -> FastAPI:
     app_settings = settings or get_settings()
 
@@ -51,6 +57,11 @@ def create_app(
         app.state.auth_manager = CodexAuthManager(
             session_factory,
             backend_factory=auth_backend_factory,
+        )
+        app.state.anchor_service = AnchorService(
+            session_factory,
+            app_settings,
+            backend_factory=anchor_backend_factory,
         )
         try:
             yield
