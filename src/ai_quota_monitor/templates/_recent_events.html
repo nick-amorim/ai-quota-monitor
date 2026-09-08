@@ -1,0 +1,18 @@
+<section
+  id="recent-events"
+  class="history-panel"
+  aria-labelledby="event-history-title"
+  hx-get="/partials/events/recent"
+  hx-trigger="every 15s"
+  hx-swap="outerHTML"
+>
+  <div class="panel-heading-row">
+    <div>
+      <p class="eyebrow">Events</p>
+      <h3 id="event-history-title">Recent events</h3>
+    </div>
+    <a href="/history" class="secondary-link">View history</a>
+  </div>
+
+  {% include "_events_table.html" %}
+</section>

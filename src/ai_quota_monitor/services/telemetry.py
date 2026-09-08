@@ -81,7 +81,31 @@ class TelemetryService:
         except Exception as exc:
             return TelemetryRefreshResult(account_id=account_id, status="failed", error=str(exc))
 
+        return self.record_rate_limit_update(
+            account_id,
+            payload,
+            captured_at=captured_at,
+            source="codex-app-server",
+        )
+
+    def record_rate_limit_update(
+        self,
+        account_id: int,
+        payload: dict[str, Any],
+        *,
+        captured_at: datetime | None = None,
+        source: str = "codex-app-server-notification",
+    ) -> TelemetryRefreshResult:
+        captured_at = captured_at or datetime.now(UTC)
         with self._session_factory() as session:
+            account = session.scalar(
+                select(Account)
+                .options(selectinload(Account.schedule))
+                .where(Account.id == account_id)
+            )
+            if account is None:
+                raise KeyError(account_id)
+
             raw = UsageRaw(
                 account_id=account_id,
                 captured_at=captured_at,
@@ -93,16 +117,7 @@ class TelemetryService:
 
             normalized = normalize_rate_limits(payload)
             previous = latest_usage_snapshot(session, account_id)
-            account = session.scalar(
-                select(Account)
-                .options(selectinload(Account.schedule))
-                .where(Account.id == account_id)
-            )
-            expected = (
-                expected_reset_times(account, captured_at)
-                if account is not None
-                else None
-            )
+            expected = expected_reset_times(account, captured_at)
             snapshot = _snapshot_from_normalized(
                 account_id=account_id,
                 captured_at=captured_at,
@@ -110,6 +125,7 @@ class TelemetryService:
                 normalized=normalized,
                 previous=previous,
                 expected=expected,
+                source=source,
             )
             session.add(snapshot)
             session.commit()
@@ -228,6 +244,7 @@ def _snapshot_from_normalized(
     normalized: NormalizedUsage,
     previous: UsageSnapshot | None,
     expected,
+    source: str = "codex-app-server",
 ) -> UsageSnapshot:
     five_hour = normalized.five_hour
     weekly = normalized.weekly
@@ -284,7 +301,7 @@ def _snapshot_from_normalized(
         weekly_observed_reset_at=weekly_observed_reset_at,
         parser_status=normalized.parser_status,
         parser_message=normalized.parser_message,
-        source="codex-app-server",
+        source=source,
         raw_usage_id=raw_usage_id,
     )
 

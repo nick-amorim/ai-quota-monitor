@@ -8,8 +8,9 @@ from ai_quota_monitor.services.app_server import CodexAppServerClient
 
 
 class FakeStdin:
-    def __init__(self, responses):
+    def __init__(self, responses, *, emit_notification: bool = False):
         self._responses = responses
+        self._emit_notification = emit_notification
         self.messages = []
 
     def write(self, value):
@@ -25,6 +26,20 @@ class FakeStdin:
         elif method == "account/read":
             result = {"requiresOpenaiAuth": True, "account": None}
         elif method == "account/rateLimits/read":
+            if self._emit_notification:
+                self._responses.put(
+                    {
+                        "method": "account/rateLimits/updated",
+                        "params": {
+                            "rateLimits": {
+                                "primary": {
+                                    "usedPercent": 41,
+                                    "windowDurationMins": 300,
+                                }
+                            }
+                        },
+                    }
+                )
             result = {"rateLimits": {"primary": {"usedPercent": 25}}}
         else:
             result = {}
@@ -49,9 +64,9 @@ class FakeStdout:
 
 
 class FakeProcess:
-    def __init__(self):
+    def __init__(self, *, emit_notification: bool = False):
         self.responses = queue.Queue()
-        self.stdin = FakeStdin(self.responses)
+        self.stdin = FakeStdin(self.responses, emit_notification=emit_notification)
         self.stdout = FakeStdout(self.responses)
         self.stderr = None
         self.terminated = False
@@ -106,3 +121,28 @@ def test_app_server_client_sends_initialize_and_account_requests(tmp_path):
     assert messages[2]["params"] == {"refreshToken": False}
     assert messages[3]["method"] == "account/rateLimits/read"
     assert "params" not in messages[3]
+
+
+def test_app_server_client_dispatches_notifications_between_responses(tmp_path):
+    account = Account(
+        name="Account A",
+        slug="account-a",
+        codex_home=str(tmp_path / "codex-home"),
+        workspace_path=str(tmp_path / "workspace"),
+    )
+    notifications = []
+
+    def fake_factory(args, **kwargs):
+        return FakeProcess(emit_notification=True)
+
+    with CodexAppServerClient(
+        account,
+        process_factory=fake_factory,
+        notification_handler=notifications.append,
+    ) as client:
+        limits_result = client.read_rate_limits()
+
+    assert limits_result["rateLimits"]["primary"]["usedPercent"] == 25
+    assert len(notifications) == 1
+    assert notifications[0].method == "account/rateLimits/updated"
+    assert notifications[0].params["rateLimits"]["primary"]["usedPercent"] == 41

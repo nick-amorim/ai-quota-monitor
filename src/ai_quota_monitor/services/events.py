@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -8,6 +9,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 
 from ai_quota_monitor.models import EventLog
+
+
+@dataclass(frozen=True)
+class EventFilters:
+    account_id: int | None = None
+    level: str | None = None
+    category: str | None = None
 
 
 def record_event(
@@ -38,12 +46,26 @@ def recent_events(
     *,
     limit: int = 20,
 ) -> list[EventLog]:
+    return list_events(session_factory, filters=EventFilters(), limit=limit)
+
+
+def list_events(
+    session_factory: sessionmaker[Session],
+    *,
+    filters: EventFilters,
+    limit: int = 100,
+) -> list[EventLog]:
     with session_factory() as session:
-        return list(
-            session.scalars(
-                select(EventLog)
-                .options(selectinload(EventLog.account))
-                .order_by(EventLog.created_at.desc(), EventLog.id.desc())
-                .limit(limit)
-            )
+        query = select(EventLog).options(selectinload(EventLog.account))
+        if filters.account_id is not None:
+            query = query.where(EventLog.account_id == filters.account_id)
+        if filters.level:
+            query = query.where(EventLog.level == filters.level)
+        if filters.category:
+            query = query.where(EventLog.category.like(f"{filters.category}%"))
+
+        query = (
+            query.order_by(EventLog.created_at.desc(), EventLog.id.desc())
+            .limit(limit)
         )
+        return list(session.scalars(query))

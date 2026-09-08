@@ -20,6 +20,7 @@ class Settings(BaseSettings):
 
     usage_poll_interval_minutes: int = 5
     enable_scheduler: bool = True
+    enable_app_server_notifications: bool = True
     anchor_prompt: str = "Reply only with OK."
     anchor_verification_timeout_seconds: int = 60
     missed_anchor_policy: str = "run_if_within_grace"

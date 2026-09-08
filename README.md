@@ -6,7 +6,7 @@ The project goal is to make Codex usage windows visible and predictable without 
 
 ## Current Status
 
-Phase 7 smart anchor validation is implemented.
+Phase 8 events and live dashboard updates are implemented.
 
 Local planning drafts may exist under `docs/`, but that directory is intentionally ignored and not tracked in Git.
 
@@ -29,6 +29,9 @@ The current application provides:
 - scheduler event logging;
 - smart scheduled-anchor validation with pre/post telemetry checks;
 - observed and expected reset timestamps displayed separately;
+- app-server rate-limit update notification ingestion;
+- refreshable dashboard sections for usage, scheduler status, and recent events;
+- filterable event history at `/history`;
 - startup migrations before default seeding;
 - pytest smoke tests.
 
@@ -120,6 +123,14 @@ If a later response is partial or sparse, missing normalized fields carry forwar
 
 Usage snapshots store observed reset timestamps returned by Codex separately from expected reset timestamps derived from the configured account schedule. The dashboard displays both values for the 5-hour and weekly windows.
 
+Phase 8 keeps an optional long-running app-server listener open for each enabled, connected account. The listener handles `account/rateLimits/updated` notifications and writes them through the same raw-plus-normalized telemetry path as manual refreshes. Sparse notification payloads merge into the previous snapshot so missing windows do not erase known 5-hour or weekly values.
+
+Notification listeners are enabled by default and can be disabled with:
+
+```text
+AI_QUOTA_MONITOR_ENABLE_APP_SERVER_NOTIFICATIONS=false
+```
+
 ## Scheduler and Smart Anchors
 
 Phase 6 adds background anchor scheduling through APScheduler.
@@ -152,11 +163,29 @@ Manual anchors still run immediately from the dashboard button.
 
 The scheduler uses the same account-scoped locking path as manual anchors, so overlapping anchor runs for the same account are blocked. Scheduler starts, reloads, missed jobs, failures, skipped jobs, completed scheduled anchors, and smart-anchor verification outcomes are recorded in `events`.
 
+## Events and Live Updates
+
+The dashboard uses server-rendered partials for sections that can change while the app is open:
+
+- quota telemetry refreshes every 30 seconds per account;
+- scheduled jobs refresh every 30 seconds;
+- recent events refresh every 15 seconds.
+
+The app ships a small local HTMX-compatible adapter for the `hx-get`, `hx-trigger`, and `hx-swap` attributes used by these fragments, so no Node build toolchain or external browser dependency is required.
+
+The full event history is available at:
+
+```text
+http://127.0.0.1:8080/history
+```
+
+History can be filtered by account, severity level, and category prefix. Telemetry notification lifecycle events, scheduler events, smart-anchor decisions, and anchor failures are persisted there for debugging without mixing operational noise into the main account cards.
+
 ## Planned Stack
 
 - Python 3.10 or newer.
 - FastAPI and Uvicorn.
-- Jinja2 and HTMX.
+- Jinja2 and HTMX-style server-rendered partials.
 - SQLite.
 - SQLAlchemy 2.x and Alembic.
 - APScheduler.
@@ -317,7 +346,11 @@ Available routes:
 | Route | Purpose |
 | --- | --- |
 | `/` | Account and schedule dashboard |
+| `/history` | Filterable event history |
 | `/health` | JSON health check with database status |
+| `/partials/accounts/{account_id}/usage` | Refreshable account usage partial |
+| `/partials/scheduler` | Refreshable scheduled jobs partial |
+| `/partials/events/recent` | Refreshable recent events partial |
 | `POST /accounts/{account_id}/schedule` | Persist account schedule changes |
 | `POST /accounts/{account_id}/auth/device-login` | Start ChatGPT device-code login |
 | `POST /accounts/{account_id}/auth/cancel` | Cancel a pending device-code login |
