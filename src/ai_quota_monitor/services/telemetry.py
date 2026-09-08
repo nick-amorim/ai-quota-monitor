@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, selectinload, sessionmaker
 from ai_quota_monitor.models import Account, UsageRaw, UsageSnapshot
 from ai_quota_monitor.services.accounts import list_accounts
 from ai_quota_monitor.services.app_server import CodexAppServerClient
+from ai_quota_monitor.services.reset_times import expected_reset_times
 
 PARSER_VERSION = "rate-limits-v1"
 FIVE_HOUR_WINDOW_MINUTES = 300
@@ -92,12 +93,23 @@ class TelemetryService:
 
             normalized = normalize_rate_limits(payload)
             previous = latest_usage_snapshot(session, account_id)
+            account = session.scalar(
+                select(Account)
+                .options(selectinload(Account.schedule))
+                .where(Account.id == account_id)
+            )
+            expected = (
+                expected_reset_times(account, captured_at)
+                if account is not None
+                else None
+            )
             snapshot = _snapshot_from_normalized(
                 account_id=account_id,
                 captured_at=captured_at,
                 raw_usage_id=raw.id,
                 normalized=normalized,
                 previous=previous,
+                expected=expected,
             )
             session.add(snapshot)
             session.commit()
@@ -215,9 +227,26 @@ def _snapshot_from_normalized(
     raw_usage_id: int,
     normalized: NormalizedUsage,
     previous: UsageSnapshot | None,
+    expected,
 ) -> UsageSnapshot:
     five_hour = normalized.five_hour
     weekly = normalized.weekly
+    five_hour_observed_reset_at = _pick(
+        five_hour.reset_at if five_hour else None,
+        previous.five_hour_observed_reset_at
+        if previous and previous.five_hour_observed_reset_at
+        else previous.five_hour_reset_at
+        if previous
+        else None,
+    )
+    weekly_observed_reset_at = _pick(
+        weekly.reset_at if weekly else None,
+        previous.weekly_observed_reset_at
+        if previous and previous.weekly_observed_reset_at
+        else previous.weekly_reset_at
+        if previous
+        else None,
+    )
     return UsageSnapshot(
         account_id=account_id,
         captured_at=captured_at,
@@ -233,6 +262,10 @@ def _snapshot_from_normalized(
             five_hour.reset_at if five_hour else None,
             previous.five_hour_reset_at if previous else None,
         ),
+        five_hour_expected_reset_at=(
+            expected.five_hour_reset_at if expected is not None else None
+        ),
+        five_hour_observed_reset_at=five_hour_observed_reset_at,
         weekly_used_percent=_pick(
             weekly.used_percent if weekly else None,
             previous.weekly_used_percent if previous else None,
@@ -245,6 +278,10 @@ def _snapshot_from_normalized(
             weekly.reset_at if weekly else None,
             previous.weekly_reset_at if previous else None,
         ),
+        weekly_expected_reset_at=(
+            expected.weekly_reset_at if expected is not None else None
+        ),
+        weekly_observed_reset_at=weekly_observed_reset_at,
         parser_status=normalized.parser_status,
         parser_message=normalized.parser_message,
         source="codex-app-server",

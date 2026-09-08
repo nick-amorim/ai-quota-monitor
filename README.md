@@ -6,7 +6,7 @@ The project goal is to make Codex usage windows visible and predictable without 
 
 ## Current Status
 
-Phase 6 scheduler foundation is implemented.
+Phase 7 smart anchor validation is implemented.
 
 Local planning drafts may exist under `docs/`, but that directory is intentionally ignored and not tracked in Git.
 
@@ -27,18 +27,13 @@ The current application provides:
 - APScheduler-backed daily and weekly anchor jobs;
 - schedule reload after dashboard schedule changes;
 - scheduler event logging;
+- smart scheduled-anchor validation with pre/post telemetry checks;
+- observed and expected reset timestamps displayed separately;
 - startup migrations before default seeding;
 - pytest smoke tests.
 
-## Planned Features
+## Remaining Planned Features
 
-- Isolated Codex authentication for Account A and Account B.
-- Current 5-hour quota usage and reset time.
-- Current weekly quota usage and reset time.
-- Smart validation around scheduled Codex anchor turns.
-- Persistent observed reset timestamps from Codex telemetry.
-- Schedule editor in the dashboard.
-- Anchor execution history and event logs.
 - Compact `/monitor` view for tiny always-on displays.
 - Proxmox LXC deployment.
 - Docker Compose deployment.
@@ -123,7 +118,9 @@ Normalization identifies windows by `windowDurationMins`:
 
 If a later response is partial or sparse, missing normalized fields carry forward the previous known-good value for that account. If the app-server response shape changes and neither expected window can be found, the raw payload is still retained and the snapshot is marked `unsupported` rather than showing invented quota data.
 
-## Scheduler
+Usage snapshots store observed reset timestamps returned by Codex separately from expected reset timestamps derived from the configured account schedule. The dashboard displays both values for the 5-hour and weekly windows.
+
+## Scheduler and Smart Anchors
 
 Phase 6 adds background anchor scheduling through APScheduler.
 
@@ -141,7 +138,19 @@ Missed jobs follow the configured missed-anchor policy:
 - `run_if_within_grace` runs a missed job only if it is inside the configured grace window;
 - `skip_missed` skips jobs that were missed before the scheduler could run them.
 
-The scheduler calls the same `AnchorService` used by manual anchor runs, so account-scoped locking still prevents overlapping anchor runs for the same account. Scheduler starts, reloads, missed jobs, failures, skipped jobs, and completed scheduled anchors are recorded in `events`.
+Phase 7 routes scheduled jobs through smart validation before spending an anchor turn.
+
+Scheduled anchor validation:
+
+1. refreshes quota telemetry before the anchor;
+2. skips the anchor when the observed 5-hour window is already active and `skip_if_window_active` is enabled;
+3. sends the anchor when telemetry says no active window is present, or when pre-anchor telemetry is unavailable;
+4. refreshes telemetry after the anchor;
+5. records whether the observed reset timestamp moved as expected.
+
+Manual anchors still run immediately from the dashboard button.
+
+The scheduler uses the same account-scoped locking path as manual anchors, so overlapping anchor runs for the same account are blocked. Scheduler starts, reloads, missed jobs, failures, skipped jobs, completed scheduled anchors, and smart-anchor verification outcomes are recorded in `events`.
 
 ## Planned Stack
 
@@ -159,7 +168,7 @@ V1 should not use React, Angular, a Node build toolchain, PostgreSQL, Redis, Cel
 
 ## Architecture
 
-ai-quota-monitor will use two Codex integration paths:
+ai-quota-monitor uses two Codex integration paths:
 
 - a Python SDK/runtime path for account login and anchor turns;
 - an app-server telemetry path for account and quota data, if verified as available in the installed official runtime.

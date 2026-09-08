@@ -14,8 +14,9 @@ from sqlalchemy.orm import Session, sessionmaker
 from ai_quota_monitor.config import Settings
 from ai_quota_monitor.models import Account, AppSetting
 from ai_quota_monitor.services.accounts import WEEKDAYS, list_accounts
-from ai_quota_monitor.services.anchors import AnchorAlreadyRunningError, AnchorService
+from ai_quota_monitor.services.anchors import AnchorAlreadyRunningError
 from ai_quota_monitor.services.events import record_event
+from ai_quota_monitor.services.smart_anchors import SmartAnchorResult
 
 SCHEDULER_JOB_PREFIX = "anchor:"
 AP_DAYS = {
@@ -63,15 +64,20 @@ class SchedulerService(Protocol):
         ...
 
 
+class ScheduledAnchorRunner(Protocol):
+    def run_scheduled_anchor(self, account_id: int, kind: str) -> SmartAnchorResult:
+        ...
+
+
 class QuotaScheduler:
     def __init__(
         self,
         session_factory: sessionmaker[Session],
-        anchor_service: AnchorService,
+        anchor_runner: ScheduledAnchorRunner,
         settings: Settings,
     ) -> None:
         self._session_factory = session_factory
-        self._anchor_service = anchor_service
+        self._anchor_runner = anchor_runner
         self._settings = settings
         self._scheduler: BackgroundScheduler | None = None
 
@@ -219,7 +225,7 @@ class QuotaScheduler:
             account_id=account_id,
         )
         try:
-            self._anchor_service.run_manual_anchor(account_id)
+            result = self._anchor_runner.run_scheduled_anchor(account_id, kind)
         except AnchorAlreadyRunningError as exc:
             self._record_event(
                 level="warning",
@@ -238,11 +244,22 @@ class QuotaScheduler:
             )
             raise
         else:
+            verb = "completed"
+            level = "info"
+            if result.decision.startswith("skipped"):
+                verb = "skipped"
+            elif result.verification_status != "verified":
+                level = "warning"
             self._record_event(
-                level="info",
+                level=level,
                 category="scheduler.anchor",
-                message=f"Scheduled {kind} anchor completed",
+                message=f"Scheduled {kind} anchor {verb}",
                 account_id=account_id,
+                payload={
+                    "decision": result.decision,
+                    "verification_status": result.verification_status,
+                    "anchor_run_id": result.anchor_run_id,
+                },
             )
 
     def _require_scheduler(self) -> BackgroundScheduler:

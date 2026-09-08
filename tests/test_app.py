@@ -279,5 +279,7 @@ def test_usage_refresh_route_records_quota_snapshot(tmp_path):
 
     assert response.status_code == 303
     assert "Quota telemetry" in dashboard.text
+    assert "Observed reset" in dashboard.text
+    assert "Expected reset" in dashboard.text
     assert "72" in dashboard.text
     assert "43" in dashboard.text
