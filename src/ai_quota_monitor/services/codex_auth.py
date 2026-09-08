@@ -15,20 +15,30 @@ from ai_quota_monitor.models import Account
 CODEX_API_KEY_ENV_VARS = ("CODEX_API_KEY", "OPENAI_API_KEY")
 
 
-def codex_config_for_account(account: Account):
-    from openai_codex import CodexConfig
-
+def codex_runtime_paths(account: Account) -> tuple[Path, Path]:
     codex_home = Path(account.codex_home).expanduser().resolve()
     workspace_path = Path(account.workspace_path).expanduser().resolve()
     codex_home.mkdir(parents=True, exist_ok=True)
     workspace_path.mkdir(parents=True, exist_ok=True)
+    return codex_home, workspace_path
+
+
+def codex_env_for_account(account: Account) -> dict[str, str]:
+    codex_home, _ = codex_runtime_paths(account)
+    return {
+        "CODEX_HOME": str(codex_home),
+        **{key: "" for key in CODEX_API_KEY_ENV_VARS},
+    }
+
+
+def codex_config_for_account(account: Account):
+    from openai_codex import CodexConfig
+
+    _, workspace_path = codex_runtime_paths(account)
 
     return CodexConfig(
         cwd=str(workspace_path),
-        env={
-            "CODEX_HOME": str(codex_home),
-            **{key: "" for key in CODEX_API_KEY_ENV_VARS},
-        },
+        env=codex_env_for_account(account),
         client_name="ai_quota_monitor",
         client_title="ai-quota-monitor",
     )

@@ -6,7 +6,7 @@ The project goal is to make Codex usage windows visible and predictable without 
 
 ## Current Status
 
-Phase 4 manual anchor execution is implemented.
+Phase 5 app-server telemetry foundation is implemented.
 
 Local planning drafts may exist under `docs/`, but that directory is intentionally ignored and not tracked in Git.
 
@@ -23,6 +23,7 @@ The current application provides:
 - editable account schedule forms;
 - Codex SDK dependency and per-account auth status controls;
 - manual Codex anchor execution with persisted run history;
+- Codex app-server telemetry refresh with raw and normalized usage persistence;
 - startup migrations before default seeding;
 - pytest smoke tests.
 
@@ -99,6 +100,26 @@ Each manual anchor run writes an `anchor_runs` record with:
 
 Normal automated tests use fake Codex backends and never run a real anchor turn.
 
+## Usage Telemetry
+
+Phase 5 adds a Codex app-server telemetry path for quota data.
+
+The production telemetry backend launches one account-scoped `codex app-server` process per refresh request and initializes the newline-delimited JSON protocol with:
+
+- `initialize`;
+- `initialized`;
+- `account/read` with `{"refreshToken": false}`;
+- `account/rateLimits/read`.
+
+Each telemetry refresh stores the raw `account/rateLimits/read` response in `usage_raw` before writing a normalized `usage_snapshots` row.
+
+Normalization identifies windows by `windowDurationMins`:
+
+- `300` minutes for the 5-hour window;
+- `10080` minutes for the weekly window.
+
+If a later response is partial or sparse, missing normalized fields carry forward the previous known-good value for that account. If the app-server response shape changes and neither expected window can be found, the raw payload is still retained and the snapshot is marked `unsupported` rather than showing invented quota data.
+
 ## Planned Stack
 
 - Python 3.10 or newer.
@@ -136,6 +157,8 @@ Currently implemented tables:
 - `accounts`
 - `account_schedules`
 - `anchor_runs`
+- `usage_raw`
+- `usage_snapshots`
 - `app_settings`
 
 ## Default Schedule
@@ -263,6 +286,8 @@ Available routes:
 | `POST /accounts/{account_id}/auth/logout` | Clear the account's Codex session |
 | `POST /settings/anchor` | Update the global anchor prompt |
 | `POST /accounts/{account_id}/anchors/run` | Run one manual anchor for a connected account |
+| `POST /accounts/{account_id}/usage/refresh` | Refresh quota telemetry for one account |
+| `POST /usage/refresh-all` | Refresh quota telemetry for all accounts |
 
 Runtime data should live in `data/` locally and must not be committed.
 
