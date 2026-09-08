@@ -1,0 +1,81 @@
+<section
+  id="monitor-content"
+  class="monitor-content"
+  hx-get="{{ refresh_path }}"
+  hx-trigger="every 15s"
+  hx-swap="outerHTML"
+>
+  <header class="monitor-toolbar">
+    <div>
+      <p class="eyebrow">Generated</p>
+      <h2>{{ monitor_view.generated_at_label }}</h2>
+    </div>
+    <nav class="monitor-links" aria-label="Monitor accounts">
+      <a href="/monitor">All</a>
+      {% for account in monitor_view.accounts %}
+      <a href="/monitor/{{ account.slug }}">{{ account.name }}</a>
+      {% endfor %}
+    </nav>
+  </header>
+
+  <div class="monitor-grid">
+    {% for account in monitor_view.accounts %}
+    <article class="monitor-card monitor-card--{{ account.snapshot_status_class }}">
+      <header class="monitor-card__header">
+        <div>
+          <p class="eyebrow">{{ account.slug }}</p>
+          <h3>{{ account.name }}</h3>
+        </div>
+        <span>{{ account.auth_label }}</span>
+      </header>
+
+      {% if account.account_display %}
+      <p class="monitor-account">{{ account.account_display }}</p>
+      {% endif %}
+
+      <div class="monitor-windows">
+        {% for window in account.windows %}
+        <section class="monitor-window monitor-window--{{ window.status_class }}">
+          <div>
+            <span>{{ window.label }}</span>
+            <small>{{ window.status_label }}</small>
+          </div>
+          <strong>{{ window.used_percent_label }}</strong>
+          <div class="usage-meter" aria-hidden="true">
+            <span style="width: {{ window.used_percent_value or 0 }}%"></span>
+          </div>
+          <dl>
+            <div>
+              <dt>Configured</dt>
+              <dd>{{ window.configured_label }}</dd>
+            </div>
+            <div>
+              <dt>Expected</dt>
+              <dd>{{ window.expected_label }}</dd>
+            </div>
+            <div>
+              <dt>Observed</dt>
+              <dd>{{ window.observed_label }}</dd>
+            </div>
+            {% if window.drift_label %}
+            <div>
+              <dt>Drift</dt>
+              <dd>{{ window.drift_label }}</dd>
+            </div>
+            {% endif %}
+          </dl>
+        </section>
+        {% endfor %}
+      </div>
+
+      <footer>
+        <span>{{ account.enabled_label }}</span>
+        <span>{{ account.captured_label }}</span>
+      </footer>
+    </article>
+    {% endfor %}
+  </div>
+
+  {% set timeline = monitor_view.timeline %}
+  {% include "_timeline.html" %}
+</section>

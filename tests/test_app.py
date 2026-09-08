@@ -129,6 +129,8 @@ def test_dashboard_shell_renders(tmp_path):
     assert "Run anchor" in response.text
     assert "Global anchor prompt" in response.text
     assert "Scheduled anchors" in response.text
+    assert "Timeline" in response.text
+    assert 'href="/monitor"' in response.text
     assert 'href="/history"' in response.text
     assert 'hx-get="/partials/scheduler"' in response.text
     assert 'hx-get="/partials/events/recent"' in response.text
@@ -286,6 +288,8 @@ def test_usage_refresh_route_records_quota_snapshot(tmp_path):
     assert "Quota telemetry" in dashboard.text
     assert "Observed reset" in dashboard.text
     assert "Expected reset" in dashboard.text
+    assert "Configured:" in dashboard.text
+    assert "Weekly drift" in dashboard.text
     assert "72" in dashboard.text
     assert "43" in dashboard.text
 
@@ -335,3 +339,36 @@ def test_partial_routes_render_refreshable_sections(tmp_path):
     assert "Scheduled anchors" in scheduler.text
     assert events.status_code == 200
     assert "Recent events" in events.text
+
+
+def test_monitor_route_renders_compact_quota_view(tmp_path):
+    app = make_app(tmp_path)
+
+    with TestClient(app) as client:
+        client.post("/accounts/1/usage/refresh", follow_redirects=False)
+        response = client.get("/monitor")
+
+    assert response.status_code == 200
+    assert "Quota monitor" in response.text
+    assert 'class="monitor-body"' in response.text
+    assert 'hx-get="/partials/monitor"' in response.text
+    assert "Account A" in response.text
+    assert "5-hour" in response.text
+    assert "Weekly drift" in response.text
+
+
+def test_account_monitor_and_partial_filter_to_slug(tmp_path):
+    app = make_app(tmp_path)
+
+    with TestClient(app) as client:
+        response = client.get("/monitor/account-a")
+        partial = client.get("/partials/monitor/account-a")
+        missing = client.get("/monitor/not-real")
+
+    assert response.status_code == 200
+    assert partial.status_code == 200
+    assert missing.status_code == 404
+    assert "Account A" in response.text
+    assert "Account B" not in response.text
+    assert "Account A" in partial.text
+    assert "Account B" not in partial.text

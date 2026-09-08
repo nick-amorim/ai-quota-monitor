@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}">
     <script src="{{ url_for('static', path='/app.js') }}" defer></script>
   </head>
-  <body>
+  <body class="{{ body_class | default('') }}">
     <header class="app-header">
       <div>
         <p class="eyebrow">Codex quota monitor</p>
@@ -15,6 +15,7 @@
       </div>
       <nav class="header-nav" aria-label="Primary">
         <a href="/">Dashboard</a>
+        <a href="/monitor">Monitor</a>
         <a href="/history">History</a>
         <span class="version">v{{ version }}</span>
       </nav>

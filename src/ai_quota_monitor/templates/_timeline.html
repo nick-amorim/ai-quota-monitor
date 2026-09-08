@@ -1,0 +1,25 @@
+<section class="timeline-panel" aria-labelledby="timeline-title">
+  <div class="panel-heading-row">
+    <div>
+      <p class="eyebrow">Today</p>
+      <h3 id="timeline-title">Timeline</h3>
+    </div>
+  </div>
+
+  {% if timeline %}
+  <div class="timeline-track" aria-label="Current-day reset and anchor timeline">
+    {% for entry in timeline %}
+    <div
+      class="timeline-item timeline-item--{{ entry.entry_class }}"
+      style="left: {{ entry.minute_percent }}%"
+    >
+      <span>{{ entry.time_label }}</span>
+      <strong>{{ entry.account_name }}</strong>
+      <small>{{ entry.label }}</small>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="empty-state">No anchors or resets are scheduled for today.</p>
+  {% endif %}
+</section>

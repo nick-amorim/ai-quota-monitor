@@ -1,4 +1,5 @@
 {% set usage = usage_by_account.get(account.id) %}
+{% set account_view = account_views.get(account.id) %}
 <section
   id="account-{{ account.id }}-usage"
   class="usage-panel"
@@ -20,40 +21,37 @@
     </form>
   </div>
 
-  {% if usage %}
+  {% if account_view and account_view.has_snapshot %}
   <div class="usage-grid">
-    <div class="usage-window">
-      <span>5-hour</span>
-      <strong>
-        {{ usage.five_hour_used_percent | round(1) if usage.five_hour_used_percent is not none else "-" }}%
-      </strong>
-      <small>Observed reset:
-        {{ usage.five_hour_observed_reset_at.strftime("%Y-%m-%d %H:%M:%S") if usage.five_hour_observed_reset_at else "Unknown" }}
-      </small>
-      <small>Expected reset:
-        {{ usage.five_hour_expected_reset_at.strftime("%Y-%m-%d %H:%M:%S") if usage.five_hour_expected_reset_at else "Unknown" }}
-      </small>
+    {% for window in account_view.windows %}
+    <div class="usage-window usage-window--{{ window.status_class }}">
+      <div class="usage-window__heading">
+        <span>{{ window.label }}</span>
+        <small>{{ window.status_label }}</small>
+      </div>
+      <strong>{{ window.used_percent_label }}</strong>
+      <div class="usage-meter" aria-hidden="true">
+        <span style="width: {{ window.used_percent_value or 0 }}%"></span>
+      </div>
+      <small>Configured: {{ window.configured_label }}</small>
+      <small>Expected reset: {{ window.expected_label }}</small>
+      <small>Observed reset: {{ window.observed_label }}</small>
+      {% if window.drift_label %}
+      <small>{{ window.drift_label }}</small>
+      {% endif %}
     </div>
-    <div class="usage-window">
-      <span>Weekly</span>
-      <strong>
-        {{ usage.weekly_used_percent | round(1) if usage.weekly_used_percent is not none else "-" }}%
-      </strong>
-      <small>Observed reset:
-        {{ usage.weekly_observed_reset_at.strftime("%Y-%m-%d %H:%M:%S") if usage.weekly_observed_reset_at else "Unknown" }}
-      </small>
-      <small>Expected reset:
-        {{ usage.weekly_expected_reset_at.strftime("%Y-%m-%d %H:%M:%S") if usage.weekly_expected_reset_at else "Unknown" }}
-      </small>
-    </div>
+    {% endfor %}
   </div>
   <p class="usage-meta">
-    Captured {{ usage.captured_at.strftime("%Y-%m-%d %H:%M:%S") }}
-    {% if usage.parser_status != "ok" %}
-    <span class="usage-warning">{{ usage.parser_status }}: {{ usage.parser_message }}</span>
+    Last telemetry {{ account_view.captured_label }}
+    <span class="usage-status usage-status--{{ account_view.snapshot_status_class }}">
+      {{ account_view.snapshot_status_label }}
+    </span>
+    {% if usage and usage.parser_message %}
+    <span class="usage-warning">{{ usage.parser_message }}</span>
     {% endif %}
   </p>
   {% else %}
-  <p class="empty-state">No quota telemetry yet.</p>
+  <p class="empty-state">Waiting for quota telemetry.</p>
   {% endif %}
 </section>
