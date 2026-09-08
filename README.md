@@ -6,7 +6,7 @@ The project goal is to make Codex usage windows visible and predictable without 
 
 ## Current Status
 
-Phase 9 timeline, compact monitor view, and dashboard polish are implemented.
+Phase 10 deployment and update support is implemented.
 
 Local planning drafts may exist under `docs/`, but that directory is intentionally ignored and not tracked in Git.
 
@@ -38,14 +38,17 @@ The current application provides:
 - reset display that separates configured, expected, and observed timing;
 - weekly reset drift indicators;
 - empty, loading, error, and stale telemetry states;
+- production Dockerfile and Docker Compose configuration;
+- Proxmox/native systemd deployment assets;
+- CLI and API update helper with SQLite backup before migrations;
+- dashboard system update panel with Docker-specific guidance;
 - startup migrations before default seeding;
 - pytest smoke tests.
 
 ## Remaining Planned Features
 
-- Proxmox LXC deployment.
-- Docker Compose deployment.
-- Safe update flow that preserves SQLite data and Codex authentication homes.
+- Real-device Proxmox LXC smoke testing.
+- Opt-in integration tests against real Codex authentication and telemetry.
 
 ## Codex Authentication
 
@@ -219,6 +222,55 @@ Each quota window shows:
 
 The weekly window also shows a drift indicator comparing observed reset timing to the expected schedule.
 
+## Deployment and Updates
+
+Phase 10 adds two supported deployment paths: Docker Compose and native/Proxmox systemd.
+
+### Update Model
+
+Native and Proxmox installs update from the Git checkout in `/opt/ai-quota-monitor`. Before migrations run, the updater copies the SQLite database into the configured backup directory. Runtime state remains under `/var/lib/ai-quota-monitor`, including SQLite data, account-scoped Codex homes, workspaces, raw telemetry, history, and auth state.
+
+Docker deployments are immutable from inside the container. The app reports update status, but real Docker updates should be done by rebuilding or pulling the image and recreating the Compose service.
+
+Available update commands after installation:
+
+```bash
+ai-quota-monitor-update --dry-run
+ai-quota-monitor-update --yes --restart
+quotapilot-update --yes --restart
+update --yes --restart
+```
+
+The generic `update` script is provided because the deployment story requested it. `ai-quota-monitor-update` is the preferred explicit command name.
+
+Updater options:
+
+| Option | Purpose |
+| --- | --- |
+| `--dry-run` | Show backup and update steps without changing the checkout. |
+| `--yes` | Run non-interactively. |
+| `--advanced` | Print command details for each step. |
+| `--restart` | Restart the configured systemd service after migrations. |
+| `--install-dir PATH` | Override the Git checkout directory. |
+| `--data-dir PATH` | Override runtime data directory. |
+| `--backup-dir PATH` | Override backup directory. |
+| `--deployment-mode MODE` | Force `native`, `proxmox`, `docker`, or `auto`. |
+
+System API routes:
+
+| Route | Purpose |
+| --- | --- |
+| `GET /api/system/info` | Return deployment mode, Git revision, update support, data path, database path, and backup path. |
+| `POST /api/system/update` | Run a dry-run update plan by default, or a real update when `dry_run=false` and web updates are enabled. |
+
+Real web updates are disabled by default for native development. Proxmox installs created by the provided script set:
+
+```text
+AI_QUOTA_MONITOR_ENABLE_WEB_UPDATES=true
+```
+
+The dashboard System panel uses the same updater service as the CLI and API.
+
 ## Planned Stack
 
 - Python 3.10 or newer.
@@ -388,6 +440,8 @@ Available routes:
 | `/monitor/{account_slug}` | Compact single-account monitor |
 | `/history` | Filterable event history |
 | `/health` | JSON health check with database status |
+| `/api/system/info` | JSON deployment and update status |
+| `POST /api/system/update` | Dry-run or real native/Proxmox update |
 | `/partials/monitor` | Refreshable compact monitor partial |
 | `/partials/monitor/{account_slug}` | Refreshable single-account monitor partial |
 | `/partials/accounts/{account_id}/usage` | Refreshable account usage partial |
@@ -411,17 +465,41 @@ Run Alembic migrations against a clean target database:
 .\.venv\Scripts\python.exe -m alembic upgrade head
 ```
 
-## Planned Deployment
+## Deployment
 
 ### Proxmox LXC
 
-The target Proxmox flow is:
+Create a new Proxmox LXC from a Proxmox host:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/nick-amorim/ai-quota-monitor/main/scripts/proxmox/install-lxc.sh)
 ```
 
-Planned defaults:
+Non-interactive Proxmox creation requires a container ID:
+
+```bash
+AI_QUOTA_MONITOR_CT_ID=120 bash <(curl -fsSL https://raw.githubusercontent.com/nick-amorim/ai-quota-monitor/main/scripts/proxmox/install-lxc.sh) --yes
+```
+
+Advanced mode prompts for container ID, storage, disk, memory, swap, CPU, and network bridge:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/nick-amorim/ai-quota-monitor/main/scripts/proxmox/install-lxc.sh) --advanced
+```
+
+Install into an existing Debian/Ubuntu LXC or VM:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/nick-amorim/ai-quota-monitor/main/scripts/proxmox/install-lxc.sh) --existing
+```
+
+Update an existing native/Proxmox install:
+
+```bash
+ai-quota-monitor-update --yes --restart
+```
+
+Default Proxmox container settings:
 
 | Setting | Value |
 | --- | --- |
@@ -448,7 +526,7 @@ Updates must preserve `/var/lib/ai-quota-monitor`.
 
 ### Docker Compose
 
-Docker Compose support is planned for Phase 10. The intended shape is:
+Start the app with Docker Compose:
 
 ```bash
 docker compose up -d
@@ -461,6 +539,13 @@ Persistent data will live in a volume mounted at:
 ```
 
 Docker deployments should update by pulling a newer image and restarting the container, not by mutating the running container from inside the web app.
+
+Typical local image update:
+
+```bash
+docker compose build --pull
+docker compose up -d
+```
 
 ## Documentation Policy
 

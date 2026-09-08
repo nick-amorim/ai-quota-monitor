@@ -11,6 +11,7 @@ from ai_quota_monitor.routes.dashboard import register_routes
 from ai_quota_monitor.services.anchors import AnchorTurnResult
 from ai_quota_monitor.services.codex_auth import CodexAccountInfo
 from ai_quota_monitor.services.events import record_event
+from ai_quota_monitor.services.system import SystemInfo, UpdateResult, UpdateStep
 
 
 def make_settings(tmp_path):
@@ -78,12 +79,61 @@ class FakeTelemetryBackend:
         }
 
 
+class FakeSystemService:
+    def __init__(self, settings):
+        self.settings = settings
+
+    def info(self):
+        return SystemInfo(
+            app_name="ai-quota-monitor",
+            deployment_mode=(
+                self.settings.deployment_mode
+                if self.settings.deployment_mode != "auto"
+                else "native"
+            ),
+            update_supported=True,
+            update_message="CLI updates are available.",
+            web_updates_enabled=self.settings.enable_web_updates,
+            current_branch="main",
+            current_commit="abc123",
+            upstream_commit="def456",
+            dirty=False,
+            install_dir=str(self.settings.install_dir),
+            data_dir=str(self.settings.data_dir),
+            database_path=str(self.settings.data_dir / "ai-quota-monitor.sqlite3"),
+            backup_dir=str(self.settings.data_dir / "backups"),
+        )
+
+    def update(self, *, dry_run=True, restart=False):
+        return UpdateResult(
+            deployment_mode="native",
+            supported=True,
+            dry_run=dry_run,
+            changed=not dry_run,
+            message="Update plan is ready." if dry_run else "Update completed.",
+            steps=[
+                UpdateStep(
+                    name="backup",
+                    status="planned" if dry_run else "completed",
+                    detail="Copy database before migrations.",
+                ),
+                UpdateStep(
+                    name="migrate",
+                    status="planned" if dry_run else "completed",
+                    detail="Run Alembic migrations.",
+                    command=["python", "-m", "alembic", "upgrade", "head"],
+                ),
+            ],
+        )
+
+
 def make_app(tmp_path):
     return create_app(
         make_settings(tmp_path),
         auth_backend_factory=FakeAuthBackend,
         anchor_backend_factory=FakeAnchorBackend,
         telemetry_backend_factory=FakeTelemetryBackend,
+        system_service_factory=FakeSystemService,
     )
 
 
@@ -130,6 +180,8 @@ def test_dashboard_shell_renders(tmp_path):
     assert "Global anchor prompt" in response.text
     assert "Scheduled anchors" in response.text
     assert "Timeline" in response.text
+    assert "Deployment and updates" in response.text
+    assert "Check update plan" in response.text
     assert 'href="/monitor"' in response.text
     assert 'href="/history"' in response.text
     assert 'hx-get="/partials/scheduler"' in response.text
@@ -372,3 +424,28 @@ def test_account_monitor_and_partial_filter_to_slug(tmp_path):
     assert "Account B" not in response.text
     assert "Account A" in partial.text
     assert "Account B" not in partial.text
+
+
+def test_system_api_reports_update_status(tmp_path):
+    app = make_app(tmp_path)
+
+    with TestClient(app) as client:
+        response = client.get("/api/system/info")
+
+    assert response.status_code == 200
+    assert response.json()["app_name"] == "ai-quota-monitor"
+    assert response.json()["deployment_mode"] == "native"
+    assert response.json()["backup_dir"].endswith("backups")
+
+
+def test_system_update_api_allows_dry_run_but_blocks_real_web_update(tmp_path):
+    app = make_app(tmp_path)
+
+    with TestClient(app) as client:
+        dry_run = client.post("/api/system/update", data={"dry_run": "true"})
+        real_update = client.post("/api/system/update", data={"dry_run": "false"})
+
+    assert dry_run.status_code == 200
+    assert dry_run.json()["dry_run"] is True
+    assert dry_run.json()["steps"][0]["name"] == "backup"
+    assert real_update.status_code == 403

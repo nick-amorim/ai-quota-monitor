@@ -18,7 +18,7 @@ from ai_quota_monitor.database import (
     initialize_database,
 )
 from ai_quota_monitor.migrations import run_migrations
-from ai_quota_monitor.routes import health
+from ai_quota_monitor.routes import health, system
 from ai_quota_monitor.routes.dashboard import register_routes
 from ai_quota_monitor.services.accounts import ensure_runtime_directories, seed_defaults
 from ai_quota_monitor.services.anchors import (
@@ -34,6 +34,7 @@ from ai_quota_monitor.services.codex_auth import (
 from ai_quota_monitor.services.live_updates import RateLimitUpdateListener
 from ai_quota_monitor.services.scheduler import SchedulerService, QuotaScheduler
 from ai_quota_monitor.services.smart_anchors import SmartAnchorService
+from ai_quota_monitor.services.system import SystemService
 from ai_quota_monitor.services.telemetry import (
     CodexAppServerTelemetryBackend,
     TelemetryBackend,
@@ -56,6 +57,7 @@ def create_app(
         [sessionmaker[Session], SmartAnchorService, Settings],
         SchedulerService,
     ] = QuotaScheduler,
+    system_service_factory: Callable[[Settings], SystemService] = SystemService,
 ) -> FastAPI:
     app_settings = settings or get_settings()
 
@@ -90,6 +92,7 @@ def create_app(
             app.state.anchor_service,
             app.state.telemetry_service,
         )
+        app.state.system_service = system_service_factory(app_settings)
         app.state.rate_limit_listener = RateLimitUpdateListener(
             session_factory,
             app.state.telemetry_service,
@@ -123,5 +126,6 @@ def create_app(
     )
     app.include_router(register_routes(templates))
     app.include_router(health.router)
+    app.include_router(system.router)
 
     return app

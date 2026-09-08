@@ -1,0 +1,17 @@
+[Unit]
+Description=ai-quota-monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aiquota
+Group=aiquota
+WorkingDirectory=/opt/ai-quota-monitor
+EnvironmentFile=/etc/ai-quota-monitor.env
+ExecStart=/opt/ai-quota-monitor/.venv/bin/ai-quota-monitor
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

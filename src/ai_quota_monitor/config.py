@@ -26,6 +26,13 @@ class Settings(BaseSettings):
     missed_anchor_policy: str = "run_if_within_grace"
     missed_anchor_grace_minutes: int = 30
     history_retention_days: int = 90
+    deployment_mode: str = "auto"
+    install_dir: Path = Field(default_factory=lambda: Path("/opt/ai-quota-monitor"))
+    backup_dir: Path = Field(default_factory=lambda: Path("backups"))
+    update_remote: str = "origin"
+    update_branch: str = "main"
+    update_service_name: str = "ai-quota-monitor"
+    enable_web_updates: bool = False
 
     model_config = SettingsConfigDict(
         env_file=".env",
