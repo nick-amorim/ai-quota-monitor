@@ -1,0 +1,59 @@
+{% set usage = usage_by_account.get(account.id) %}
+<section
+  id="account-{{ account.id }}-usage"
+  class="usage-panel"
+  aria-label="Quota telemetry for {{ account.name }}"
+  hx-get="/partials/accounts/{{ account.id }}/usage"
+  hx-trigger="every 30s"
+  hx-swap="outerHTML"
+>
+  <div class="usage-panel__header">
+    <h4>Quota telemetry</h4>
+    <form method="post" action="/accounts/{{ account.id }}/usage/refresh">
+      <button
+        type="submit"
+        class="secondary-button"
+        {% if account.auth_status != "connected" %}disabled{% endif %}
+      >
+        Refresh usage
+      </button>
+    </form>
+  </div>
+
+  {% if usage %}
+  <div class="usage-grid">
+    <div class="usage-window">
+      <span>5-hour</span>
+      <strong>
+        {{ usage.five_hour_used_percent | round(1) if usage.five_hour_used_percent is not none else "-" }}%
+      </strong>
+      <small>Observed reset:
+        {{ usage.five_hour_observed_reset_at.strftime("%Y-%m-%d %H:%M:%S") if usage.five_hour_observed_reset_at else "Unknown" }}
+      </small>
+      <small>Expected reset:
+        {{ usage.five_hour_expected_reset_at.strftime("%Y-%m-%d %H:%M:%S") if usage.five_hour_expected_reset_at else "Unknown" }}
+      </small>
+    </div>
+    <div class="usage-window">
+      <span>Weekly</span>
+      <strong>
+        {{ usage.weekly_used_percent | round(1) if usage.weekly_used_percent is not none else "-" }}%
+      </strong>
+      <small>Observed reset:
+        {{ usage.weekly_observed_reset_at.strftime("%Y-%m-%d %H:%M:%S") if usage.weekly_observed_reset_at else "Unknown" }}
+      </small>
+      <small>Expected reset:
+        {{ usage.weekly_expected_reset_at.strftime("%Y-%m-%d %H:%M:%S") if usage.weekly_expected_reset_at else "Unknown" }}
+      </small>
+    </div>
+  </div>
+  <p class="usage-meta">
+    Captured {{ usage.captured_at.strftime("%Y-%m-%d %H:%M:%S") }}
+    {% if usage.parser_status != "ok" %}
+    <span class="usage-warning">{{ usage.parser_status }}: {{ usage.parser_message }}</span>
+    {% endif %}
+  </p>
+  {% else %}
+  <p class="empty-state">No quota telemetry yet.</p>
+  {% endif %}
+</section>

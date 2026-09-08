@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="dashboard-shell" aria-labelledby="history-title">
+  <div>
+    <p class="eyebrow">Events</p>
+    <h2 id="history-title">Event history</h2>
+  </div>
+
+  <form method="get" action="/history" class="filter-panel">
+    <label>
+      <span>Account</span>
+      <select name="account_id">
+        <option value="">All accounts</option>
+        {% for account in accounts %}
+        <option value="{{ account.id }}" {% if selected_account_id == account.id %}selected{% endif %}>
+          {{ account.name }}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <span>Level</span>
+      <select name="level">
+        <option value="">All levels</option>
+        {% for level in levels %}
+        <option value="{{ level }}" {% if selected_level == level %}selected{% endif %}>
+          {{ level | title }}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <span>Category prefix</span>
+      <input type="text" name="category" value="{{ selected_category or '' }}">
+    </label>
+    <button type="submit">Apply filters</button>
+  </form>
+
+  <section class="history-panel" aria-labelledby="filtered-events-title">
+    <div class="panel-heading-row">
+      <div>
+        <p class="eyebrow">Filtered</p>
+        <h3 id="filtered-events-title">Events</h3>
+      </div>
+      <a href="/" class="secondary-link">Dashboard</a>
+    </div>
+
+    {% include "_events_table.html" %}
+  </section>
+</section>
+{% endblock %}

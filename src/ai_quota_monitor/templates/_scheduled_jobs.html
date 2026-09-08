@@ -1,0 +1,40 @@
+<section
+  id="scheduled-jobs"
+  class="history-panel"
+  aria-labelledby="scheduler-title"
+  hx-get="/partials/scheduler"
+  hx-trigger="every 30s"
+  hx-swap="outerHTML"
+>
+  <div>
+    <p class="eyebrow">Automation</p>
+    <h3 id="scheduler-title">Scheduled anchors</h3>
+  </div>
+
+  {% if scheduled_jobs %}
+  <div class="history-table-wrap">
+    <table class="history-table">
+      <thead>
+        <tr>
+          <th scope="col">Account</th>
+          <th scope="col">Job</th>
+          <th scope="col">Next run</th>
+          <th scope="col">Timezone</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for job in scheduled_jobs %}
+        <tr>
+          <td>{{ job.account_name }}</td>
+          <td>{{ job.kind | title }}</td>
+          <td>{{ job.next_run_at.strftime("%Y-%m-%d %H:%M:%S") if job.next_run_at else "-" }}</td>
+          <td>{{ job.timezone }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="empty-state">No scheduled anchors are active.</p>
+  {% endif %}
+</section>

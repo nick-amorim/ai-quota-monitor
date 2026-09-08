@@ -10,12 +10,14 @@ from ai_quota_monitor.models import Account
 from ai_quota_monitor.routes.dashboard import register_routes
 from ai_quota_monitor.services.anchors import AnchorTurnResult
 from ai_quota_monitor.services.codex_auth import CodexAccountInfo
+from ai_quota_monitor.services.events import record_event
 
 
 def make_settings(tmp_path):
     return Settings(
         database_url=f"sqlite:///{tmp_path / 'ai-quota-monitor.sqlite3'}",
         data_dir=tmp_path,
+        enable_app_server_notifications=False,
     )
 
 
@@ -127,6 +129,9 @@ def test_dashboard_shell_renders(tmp_path):
     assert "Run anchor" in response.text
     assert "Global anchor prompt" in response.text
     assert "Scheduled anchors" in response.text
+    assert 'href="/history"' in response.text
+    assert 'hx-get="/partials/scheduler"' in response.text
+    assert 'hx-get="/partials/events/recent"' in response.text
     assert "No anchor runs yet." in response.text
     assert "America/Recife" in response.text
 
@@ -283,3 +288,50 @@ def test_usage_refresh_route_records_quota_snapshot(tmp_path):
     assert "Expected reset" in dashboard.text
     assert "72" in dashboard.text
     assert "43" in dashboard.text
+
+
+def test_history_route_filters_events(tmp_path):
+    app = make_app(tmp_path)
+
+    with TestClient(app) as client:
+        with app.state.session_factory() as session:
+            record_event(
+                session,
+                level="info",
+                category="scheduler.reload",
+                message="Scheduler reloaded",
+                account_id=1,
+            )
+            record_event(
+                session,
+                level="warning",
+                category="live-updates",
+                message="Listener start failed",
+                account_id=2,
+            )
+
+        response = client.get("/history?account_id=2&level=warning")
+
+    assert response.status_code == 200
+    assert "Event history" in response.text
+    assert "Listener start failed" in response.text
+    assert "Scheduler reloaded" not in response.text
+    assert "All levels" in response.text
+
+
+def test_partial_routes_render_refreshable_sections(tmp_path):
+    app = make_app(tmp_path)
+
+    with TestClient(app) as client:
+        client.post("/accounts/1/usage/refresh", follow_redirects=False)
+        usage = client.get("/partials/accounts/1/usage")
+        scheduler = client.get("/partials/scheduler")
+        events = client.get("/partials/events/recent")
+
+    assert usage.status_code == 200
+    assert "Quota telemetry" in usage.text
+    assert "72" in usage.text
+    assert scheduler.status_code == 200
+    assert "Scheduled anchors" in scheduler.text
+    assert events.status_code == 200
+    assert "Recent events" in events.text

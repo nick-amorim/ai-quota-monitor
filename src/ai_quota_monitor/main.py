@@ -31,6 +31,7 @@ from ai_quota_monitor.services.codex_auth import (
     CodexAuthManager,
     OpenAiCodexAuthBackend,
 )
+from ai_quota_monitor.services.live_updates import RateLimitUpdateListener
 from ai_quota_monitor.services.scheduler import SchedulerService, QuotaScheduler
 from ai_quota_monitor.services.smart_anchors import SmartAnchorService
 from ai_quota_monitor.services.telemetry import (
@@ -89,6 +90,11 @@ def create_app(
             app.state.anchor_service,
             app.state.telemetry_service,
         )
+        app.state.rate_limit_listener = RateLimitUpdateListener(
+            session_factory,
+            app.state.telemetry_service,
+            app_settings,
+        )
         app.state.quota_scheduler = scheduler_factory(
             session_factory,
             app.state.smart_anchor_service,
@@ -96,9 +102,12 @@ def create_app(
         )
         if app_settings.enable_scheduler:
             app.state.quota_scheduler.start()
+        if app_settings.enable_app_server_notifications:
+            app.state.rate_limit_listener.start()
         try:
             yield
         finally:
+            app.state.rate_limit_listener.shutdown()
             app.state.quota_scheduler.shutdown()
             engine.dispose()
 

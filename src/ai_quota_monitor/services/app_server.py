@@ -28,6 +28,7 @@ class CodexAppServerNotification:
 
 
 ProcessFactory = Callable[..., subprocess.Popen]
+NotificationHandler = Callable[[CodexAppServerNotification], None]
 
 
 class CodexAppServerClient:
@@ -37,11 +38,13 @@ class CodexAppServerClient:
         *,
         command: Sequence[str] = ("codex",),
         process_factory: ProcessFactory = subprocess.Popen,
+        notification_handler: NotificationHandler | None = None,
         timeout_seconds: float = 15,
     ) -> None:
         self._account = account
         self._command = tuple(command)
         self._process_factory = process_factory
+        self._notification_handler = notification_handler
         self._timeout_seconds = timeout_seconds
         self._process = None
         self._reader = None
@@ -118,6 +121,7 @@ class CodexAppServerClient:
             if isinstance(item, BaseException):
                 raise CodexAppServerError(str(item)) from item
             if item.get("id") != request_id:
+                self._handle_notification_message(item)
                 continue
             if "error" in item:
                 error = item["error"]
@@ -164,8 +168,31 @@ class CodexAppServerClient:
 
         try:
             for line in process.stdout:
-                self._messages.put(json.loads(line))
+                message = json.loads(line)
+                if self._handle_notification_message(message):
+                    continue
+                self._messages.put(message)
         except BaseException as exc:
             self._messages.put(exc)
         finally:
             self._messages.put(None)
+
+    def _handle_notification_message(self, message: dict[str, Any]) -> bool:
+        if "id" in message:
+            return False
+        method = message.get("method")
+        if not isinstance(method, str):
+            return False
+
+        handler = self._notification_handler
+        if handler is None:
+            return False
+
+        params = message.get("params")
+        handler(
+            CodexAppServerNotification(
+                method=method,
+                params=params if isinstance(params, dict) else None,
+            )
+        )
+        return True

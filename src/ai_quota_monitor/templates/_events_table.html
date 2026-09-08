@@ -1,0 +1,32 @@
+{% if events %}
+<div class="history-table-wrap">
+  <table class="history-table">
+    <thead>
+      <tr>
+        <th scope="col">Level</th>
+        <th scope="col">Account</th>
+        <th scope="col">Category</th>
+        <th scope="col">When</th>
+        <th scope="col">Message</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for event in events %}
+      <tr>
+        <td>
+          <span class="event-level event-level--{{ event.level }}">
+            {{ event.level | title }}
+          </span>
+        </td>
+        <td>{{ event.account.name if event.account else "-" }}</td>
+        <td>{{ event.category }}</td>
+        <td>{{ event.created_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+        <td>{{ event.message }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="empty-state">No events found.</p>
+{% endif %}

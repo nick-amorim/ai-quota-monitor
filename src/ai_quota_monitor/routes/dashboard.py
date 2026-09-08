@@ -16,7 +16,7 @@ from ai_quota_monitor.services.accounts import (
     update_account_schedule,
 )
 from ai_quota_monitor.services.anchors import get_app_setting, update_app_setting
-from ai_quota_monitor.services.events import recent_events
+from ai_quota_monitor.services.events import EventFilters, list_events, recent_events
 
 
 def register_routes(templates: Jinja2Templates) -> APIRouter:
@@ -50,6 +50,84 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 ),
                 "scheduler_running": request.app.state.quota_scheduler.running,
                 "scheduled_jobs": request.app.state.quota_scheduler.next_runs(),
+                "events": recent_events(session_factory, limit=8),
+            },
+        )
+
+    @router.get("/history", response_class=HTMLResponse)
+    async def history(request: Request) -> HTMLResponse:
+        session_factory = request.app.state.session_factory
+        query = request.query_params
+        selected_account_id = _optional_int(query.get("account_id"))
+        selected_level = _optional_choice(
+            query.get("level"),
+            {"info", "warning", "error"},
+        )
+        selected_category = (query.get("category") or "").strip() or None
+
+        with session_factory() as session:
+            accounts = list_accounts(session)
+
+        events = list_events(
+            session_factory,
+            filters=EventFilters(
+                account_id=selected_account_id,
+                level=selected_level,
+                category=selected_category,
+            ),
+            limit=100,
+        )
+        return templates.TemplateResponse(
+            request,
+            "history.html",
+            {
+                "app_name": request.app.state.settings.app_name,
+                "version": __version__,
+                "accounts": accounts,
+                "events": events,
+                "levels": ["info", "warning", "error"],
+                "selected_account_id": selected_account_id,
+                "selected_level": selected_level,
+                "selected_category": selected_category,
+            },
+        )
+
+    @router.get("/partials/accounts/{account_id}/usage", response_class=HTMLResponse)
+    async def account_usage_partial(account_id: int, request: Request) -> HTMLResponse:
+        session_factory = request.app.state.session_factory
+        with session_factory() as session:
+            account = get_account(session, account_id)
+            if account is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+        return templates.TemplateResponse(
+            request,
+            "_account_usage.html",
+            {
+                "account": account,
+                "usage_by_account": (
+                    request.app.state.telemetry_service.latest_snapshots_by_account()
+                ),
+            },
+        )
+
+    @router.get("/partials/scheduler", response_class=HTMLResponse)
+    async def scheduler_partial(request: Request) -> HTMLResponse:
+        return templates.TemplateResponse(
+            request,
+            "_scheduled_jobs.html",
+            {
+                "scheduled_jobs": request.app.state.quota_scheduler.next_runs(),
+            },
+        )
+
+    @router.get("/partials/events/recent", response_class=HTMLResponse)
+    async def recent_events_partial(request: Request) -> HTMLResponse:
+        session_factory = request.app.state.session_factory
+        return templates.TemplateResponse(
+            request,
+            "_recent_events.html",
+            {
                 "events": recent_events(session_factory, limit=8),
             },
         )
@@ -91,6 +169,7 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
             )
 
         request.app.state.quota_scheduler.reload()
+        request.app.state.rate_limit_listener.reload()
         return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
 
     @router.post("/accounts/{account_id}/auth/device-login")
@@ -118,6 +197,7 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
         except Exception:
             pass
 
+        request.app.state.rate_limit_listener.reload()
         return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
 
     @router.post("/accounts/{account_id}/auth/logout")
@@ -129,6 +209,7 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
         except Exception:
             pass
 
+        request.app.state.rate_limit_listener.reload()
         return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
 
     @router.post("/accounts/{account_id}/anchors/run")
@@ -188,3 +269,27 @@ def _parse_time(value: str) -> time:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Invalid time: {value}",
         ) from exc
+
+
+def _optional_int(value: str | None) -> int | None:
+    if value is None or value.strip() == "":
+        return None
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid integer: {value}",
+        ) from exc
+
+
+def _optional_choice(value: str | None, allowed: set[str]) -> str | None:
+    if value is None or value.strip() == "":
+        return None
+    normalized = value.strip().lower()
+    if normalized not in allowed:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid choice: {value}",
+        )
+    return normalized

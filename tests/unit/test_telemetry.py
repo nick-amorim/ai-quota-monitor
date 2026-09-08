@@ -146,6 +146,37 @@ def test_sparse_payload_preserves_previous_known_values(tmp_path):
     engine.dispose()
 
 
+def test_notification_sparse_update_preserves_previous_snapshot(tmp_path):
+    backend = FakeTelemetryBackend([full_payload()])
+    engine, session_factory, service = make_service(tmp_path, backend)
+
+    service.refresh_account_usage(1)
+    result = service.record_rate_limit_update(
+        1,
+        {
+            "rateLimits": {
+                "primary": {
+                    "usedPercent": 73,
+                    "resetsAt": 1798799400,
+                    "windowDurationMins": 300,
+                }
+            }
+        },
+    )
+
+    assert result.snapshot is not None
+    assert result.status == "partial"
+    assert result.snapshot.source == "codex-app-server-notification"
+    assert result.snapshot.five_hour_used_percent == 73
+    assert result.snapshot.weekly_used_percent == 43
+    assert result.snapshot.weekly_window_minutes == 10080
+
+    with session_factory() as session:
+        assert session.query(UsageRaw).count() == 2
+        assert session.query(UsageSnapshot).count() == 2
+    engine.dispose()
+
+
 def test_refresh_all_accounts_isolates_backend_failure(tmp_path):
     backend = AccountSensitiveBackend()
     engine, session_factory, service = make_service(tmp_path, backend)
