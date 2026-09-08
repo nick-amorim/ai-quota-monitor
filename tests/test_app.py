@@ -126,6 +126,7 @@ def test_dashboard_shell_renders(tmp_path):
     assert "Check status" in response.text
     assert "Run anchor" in response.text
     assert "Global anchor prompt" in response.text
+    assert "Scheduled anchors" in response.text
     assert "No anchor runs yet." in response.text
     assert "America/Recife" in response.text
 
@@ -196,6 +197,7 @@ def test_schedule_update_persists_after_restart(tmp_path):
     assert 'value="06:00"' in response.text
     assert 'value="friday"' in response.text
     assert 'value="America/Fortaleza"' in response.text
+    assert "Scheduled anchors" in response.text
 
 
 def test_auth_status_route_updates_account_metadata(tmp_path):

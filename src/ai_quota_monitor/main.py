@@ -8,6 +8,7 @@ from typing import AsyncIterator
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm import Session, sessionmaker
 
 from ai_quota_monitor import __version__
 from ai_quota_monitor.config import Settings, get_settings
@@ -30,6 +31,7 @@ from ai_quota_monitor.services.codex_auth import (
     CodexAuthManager,
     OpenAiCodexAuthBackend,
 )
+from ai_quota_monitor.services.scheduler import SchedulerService, QuotaScheduler
 from ai_quota_monitor.services.telemetry import (
     CodexAppServerTelemetryBackend,
     TelemetryBackend,
@@ -48,6 +50,10 @@ def create_app(
         [],
         TelemetryBackend,
     ] = CodexAppServerTelemetryBackend,
+    scheduler_factory: Callable[
+        [sessionmaker[Session], AnchorService, Settings],
+        SchedulerService,
+    ] = QuotaScheduler,
 ) -> FastAPI:
     app_settings = settings or get_settings()
 
@@ -76,9 +82,17 @@ def create_app(
             session_factory,
             backend_factory=telemetry_backend_factory,
         )
+        app.state.quota_scheduler = scheduler_factory(
+            session_factory,
+            app.state.anchor_service,
+            app_settings,
+        )
+        if app_settings.enable_scheduler:
+            app.state.quota_scheduler.start()
         try:
             yield
         finally:
+            app.state.quota_scheduler.shutdown()
             engine.dispose()
 
     app = FastAPI(

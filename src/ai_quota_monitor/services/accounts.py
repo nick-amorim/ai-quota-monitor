@@ -56,6 +56,7 @@ def default_app_settings(settings: Settings) -> dict[str, str]:
         "anchor_verification_timeout_seconds": str(
             settings.anchor_verification_timeout_seconds
         ),
+        "missed_anchor_policy": settings.missed_anchor_policy,
         "missed_anchor_grace_minutes": str(settings.missed_anchor_grace_minutes),
         "history_retention_days": str(settings.history_retention_days),
     }
