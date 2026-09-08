@@ -1,13 +1,32 @@
 {% extends "base.html" %}
 
+{% block header_actions %}
+<button class="icon-btn primary" type="button" data-drawer-open="settings-drawer" aria-label="Open settings">
+  <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2">
+    <circle cx="12" cy="12" r="3"></circle>
+    <path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a7 7 0 0 0-1.7-1L14.5 3h-5l-.3 3.1a7 7 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.3 3.1h5l.3-3.1a7 7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.5c.1-.3.1-.7.1-1Z"></path>
+  </svg>
+  <span class="icon-btn-label">Settings</span>
+</button>
+{% endblock %}
+
 {% block content %}
 <section class="dashboard-shell" aria-labelledby="dashboard-title">
-  <div>
-    <h2 id="dashboard-title">Accounts and schedules</h2>
-    <p>
-      Account setup, authentication, quota telemetry, schedules, and anchor execution are available.
-      Scheduled anchors reload as soon as account schedules change.
-    </p>
+  <div class="dashboard-hero">
+    <div>
+      <p class="eyebrow">Operational dashboard</p>
+      <h2 id="dashboard-title">Accounts and schedules</h2>
+      <p>
+        Account setup, authentication, quota telemetry, schedules, and anchor execution are available.
+        Scheduled anchors reload as soon as account schedules change.
+      </p>
+    </div>
+    <div class="hero-actions">
+      <form method="post" action="/usage/refresh-all">
+        <button type="submit">Refresh usage</button>
+      </form>
+      <a href="/monitor" class="button-link secondary-button">Open monitor</a>
+    </div>
   </div>
 
   <dl class="status-grid">
@@ -29,78 +48,7 @@
     </div>
   </dl>
 
-  <form method="post" action="/usage/refresh-all" class="refresh-all-form">
-    <button type="submit">Refresh all usage</button>
-  </form>
-
   {% include "_timeline.html" %}
-
-  <section class="settings-panel system-panel" aria-labelledby="system-update-title">
-    <div class="panel-heading-row">
-      <div>
-        <p class="eyebrow">System</p>
-        <h3 id="system-update-title">Deployment and updates</h3>
-      </div>
-      <span class="deployment-badge deployment-badge--{{ system_info.deployment_mode }}">
-        {{ system_info.deployment_mode | title }}
-      </span>
-    </div>
-
-    <dl class="system-grid">
-      <div>
-        <dt>Current</dt>
-        <dd>
-          {{ system_info.current_branch or "Unknown" }}
-          {% if system_info.current_commit %}@ {{ system_info.current_commit }}{% endif %}
-        </dd>
-      </div>
-      <div>
-        <dt>Upstream</dt>
-        <dd>{{ system_info.upstream_commit or "Unknown" }}</dd>
-      </div>
-      <div>
-        <dt>Data</dt>
-        <dd>{{ system_info.data_dir }}</dd>
-      </div>
-      <div>
-        <dt>Backups</dt>
-        <dd>{{ system_info.backup_dir }}</dd>
-      </div>
-    </dl>
-
-    <p class="system-message">{{ system_info.update_message }}</p>
-
-    <div class="system-actions">
-      <form method="post" action="/api/system/update">
-        <input type="hidden" name="dry_run" value="true">
-        <button type="submit" class="secondary-button">Check update plan</button>
-      </form>
-      <form method="post" action="/api/system/update">
-        <input type="hidden" name="dry_run" value="false">
-        <input type="hidden" name="restart" value="true">
-        <button
-          type="submit"
-          {% if not system_info.web_updates_enabled or system_info.deployment_mode == "docker" %}disabled{% endif %}
-        >
-          Run update
-        </button>
-      </form>
-    </div>
-  </section>
-
-  <section class="settings-panel" aria-labelledby="anchor-settings-title">
-    <div>
-      <p class="eyebrow">Anchor execution</p>
-      <h3 id="anchor-settings-title">Global anchor prompt</h3>
-    </div>
-    <form method="post" action="/settings/anchor" class="anchor-settings-form">
-      <label>
-        <span>Prompt</span>
-        <textarea name="anchor_prompt" rows="3" required>{{ anchor_prompt }}</textarea>
-      </label>
-      <button type="submit">Save prompt</button>
-    </form>
-  </section>
 
   <div class="account-grid">
     {% for account in accounts %}
@@ -140,6 +88,17 @@
 
       {% include "_account_usage.html" %}
 
+      <dl class="schedule-summary">
+        <div>
+          <dt>Daily</dt>
+          <dd>{{ account.schedule.daily_anchor_time.strftime('%H:%M') }}</dd>
+        </div>
+        <div>
+          <dt>Weekly</dt>
+          <dd>{{ account.schedule.weekly_target_day | title }} {{ account.schedule.weekly_target_time.strftime('%H:%M') }}</dd>
+        </div>
+      </dl>
+
       <div class="auth-actions" aria-label="Authentication actions for {{ account.name }}">
         <form method="post" action="/accounts/{{ account.id }}/auth/device-login">
           <button type="submit">Start device login</button>
@@ -166,92 +125,10 @@
             Run anchor
           </button>
         </form>
+        <button type="button" class="secondary-button" data-drawer-open="settings-drawer">
+          Edit settings
+        </button>
       </div>
-
-      <form method="post" action="/accounts/{{ account.id }}/schedule" class="schedule-form">
-        <label class="check-row">
-          <input type="checkbox" name="enabled" {% if account.enabled %}checked{% endif %}>
-          <span>Account enabled</span>
-        </label>
-
-        <div class="form-grid">
-          <label>
-            <span>Daily anchor</span>
-            <input
-              type="time"
-              name="daily_anchor_time"
-              value="{{ account.schedule.daily_anchor_time.strftime('%H:%M') }}"
-              required
-            >
-          </label>
-
-          <label>
-            <span>Weekly day</span>
-            <select name="weekly_target_day" required>
-              {% for weekday in weekdays %}
-              <option
-                value="{{ weekday }}"
-                {% if account.schedule.weekly_target_day == weekday %}selected{% endif %}
-              >
-                {{ weekday | title }}
-              </option>
-              {% endfor %}
-            </select>
-          </label>
-
-          <label>
-            <span>Weekly time</span>
-            <input
-              type="time"
-              name="weekly_target_time"
-              value="{{ account.schedule.weekly_target_time.strftime('%H:%M') }}"
-              required
-            >
-          </label>
-
-          <label>
-            <span>Timezone</span>
-            <input type="text" name="timezone" value="{{ account.schedule.timezone }}" required>
-          </label>
-        </div>
-
-        <fieldset>
-          <legend>Run days</legend>
-          <div class="weekday-grid">
-            {% for weekday in weekdays %}
-            <label class="check-row">
-              <input
-                type="checkbox"
-                name="{{ weekday }}_enabled"
-                {% if account.schedule[weekday + "_enabled"] %}checked{% endif %}
-              >
-              <span>{{ weekday[:3] | title }}</span>
-            </label>
-            {% endfor %}
-          </div>
-        </fieldset>
-
-        <div class="toggle-group">
-          <label class="check-row">
-            <input
-              type="checkbox"
-              name="daily_anchor_enabled"
-              {% if account.schedule.daily_anchor_enabled %}checked{% endif %}
-            >
-            <span>Daily anchor enabled</span>
-          </label>
-          <label class="check-row">
-            <input
-              type="checkbox"
-              name="skip_if_window_active"
-              {% if account.schedule.skip_if_window_active %}checked{% endif %}
-            >
-            <span>Skip when a 5h window is active</span>
-          </label>
-        </div>
-
-        <button type="submit">Save schedule</button>
-      </form>
     </article>
     {% endfor %}
   </div>
@@ -307,5 +184,180 @@
   </section>
 
   {% include "_recent_events.html" %}
+
+  <div id="settings-drawer" class="drawer" hidden role="dialog" aria-modal="true" aria-labelledby="settings-drawer-title">
+    <div class="drawer-backdrop" data-drawer-close="settings-drawer"></div>
+    <aside class="drawer-panel">
+      <header class="drawer-head">
+        <div>
+          <p class="eyebrow">Configuration</p>
+          <h3 id="settings-drawer-title">Settings</h3>
+        </div>
+        <button type="button" class="modal-close" data-drawer-close="settings-drawer" aria-label="Close settings">x</button>
+      </header>
+
+      <div class="drawer-body">
+        <section class="settings-panel system-panel" aria-labelledby="system-update-title">
+          <div class="panel-heading-row">
+            <div>
+              <p class="eyebrow">System</p>
+              <h3 id="system-update-title">Deployment and updates</h3>
+            </div>
+            <span class="deployment-badge deployment-badge--{{ system_info.deployment_mode }}">
+              {{ system_info.deployment_mode | title }}
+            </span>
+          </div>
+
+          <dl class="system-grid">
+            <div>
+              <dt>Current</dt>
+              <dd>
+                {{ system_info.current_branch or "Unknown" }}
+                {% if system_info.current_commit %}@ {{ system_info.current_commit }}{% endif %}
+              </dd>
+            </div>
+            <div>
+              <dt>Upstream</dt>
+              <dd>{{ system_info.upstream_commit or "Unknown" }}</dd>
+            </div>
+            <div>
+              <dt>Data</dt>
+              <dd>{{ system_info.data_dir }}</dd>
+            </div>
+            <div>
+              <dt>Backups</dt>
+              <dd>{{ system_info.backup_dir }}</dd>
+            </div>
+          </dl>
+
+          <p class="system-message">{{ system_info.update_message }}</p>
+
+          <div class="system-actions">
+            <form method="post" action="/api/system/update">
+              <input type="hidden" name="dry_run" value="true">
+              <button type="submit" class="secondary-button">Check update plan</button>
+            </form>
+            <form method="post" action="/api/system/update">
+              <input type="hidden" name="dry_run" value="false">
+              <input type="hidden" name="restart" value="true">
+              <button
+                type="submit"
+                {% if not system_info.web_updates_enabled or system_info.deployment_mode == "docker" %}disabled{% endif %}
+              >
+                Run update
+              </button>
+            </form>
+          </div>
+        </section>
+
+        <section class="settings-panel" aria-labelledby="anchor-settings-title">
+          <div>
+            <p class="eyebrow">Anchor execution</p>
+            <h3 id="anchor-settings-title">Global anchor prompt</h3>
+          </div>
+          <form method="post" action="/settings/anchor" class="anchor-settings-form">
+            <label>
+              <span>Prompt</span>
+              <textarea name="anchor_prompt" rows="3" required>{{ anchor_prompt }}</textarea>
+            </label>
+            <button type="submit">Save prompt</button>
+          </form>
+        </section>
+
+        {% for account in accounts %}
+        <section class="settings-panel" aria-labelledby="schedule-settings-title-{{ account.id }}">
+          <div>
+            <p class="eyebrow">{{ account.slug }}</p>
+            <h3 id="schedule-settings-title-{{ account.id }}">{{ account.name }} schedule</h3>
+          </div>
+          <form method="post" action="/accounts/{{ account.id }}/schedule" class="schedule-form">
+            <label class="check-row">
+              <input type="checkbox" name="enabled" {% if account.enabled %}checked{% endif %}>
+              <span>Account enabled</span>
+            </label>
+
+            <div class="form-grid">
+              <label>
+                <span>Daily anchor</span>
+                <input
+                  type="time"
+                  name="daily_anchor_time"
+                  value="{{ account.schedule.daily_anchor_time.strftime('%H:%M') }}"
+                  required
+                >
+              </label>
+
+              <label>
+                <span>Weekly day</span>
+                <select name="weekly_target_day" required>
+                  {% for weekday in weekdays %}
+                  <option
+                    value="{{ weekday }}"
+                    {% if account.schedule.weekly_target_day == weekday %}selected{% endif %}
+                  >
+                    {{ weekday | title }}
+                  </option>
+                  {% endfor %}
+                </select>
+              </label>
+
+              <label>
+                <span>Weekly time</span>
+                <input
+                  type="time"
+                  name="weekly_target_time"
+                  value="{{ account.schedule.weekly_target_time.strftime('%H:%M') }}"
+                  required
+                >
+              </label>
+
+              <label>
+                <span>Timezone</span>
+                <input type="text" name="timezone" value="{{ account.schedule.timezone }}" required>
+              </label>
+            </div>
+
+            <fieldset>
+              <legend>Run days</legend>
+              <div class="weekday-grid">
+                {% for weekday in weekdays %}
+                <label class="check-row">
+                  <input
+                    type="checkbox"
+                    name="{{ weekday }}_enabled"
+                    {% if account.schedule[weekday + "_enabled"] %}checked{% endif %}
+                  >
+                  <span>{{ weekday[:3] | title }}</span>
+                </label>
+                {% endfor %}
+              </div>
+            </fieldset>
+
+            <div class="toggle-group">
+              <label class="check-row">
+                <input
+                  type="checkbox"
+                  name="daily_anchor_enabled"
+                  {% if account.schedule.daily_anchor_enabled %}checked{% endif %}
+                >
+                <span>Daily anchor enabled</span>
+              </label>
+              <label class="check-row">
+                <input
+                  type="checkbox"
+                  name="skip_if_window_active"
+                  {% if account.schedule.skip_if_window_active %}checked{% endif %}
+                >
+                <span>Skip when a 5h window is active</span>
+              </label>
+            </div>
+
+            <button type="submit">Save schedule</button>
+          </form>
+        </section>
+        {% endfor %}
+      </div>
+    </aside>
+  </div>
 </section>
 {% endblock %}

@@ -1,4 +1,6 @@
 (function () {
+  const THEME_KEY = "aiQuotaMonitorTheme";
+
   function parseInterval(trigger) {
     const match = trigger.match(/every\s+(\d+)s/);
     if (!match) {
@@ -74,5 +76,93 @@
     });
   }
 
-  window.addEventListener("DOMContentLoaded", () => initialize(document));
+  function applyTheme(theme) {
+    const normalized = theme === "light" ? "light" : "dark";
+    document.documentElement.classList.remove("dark", "light");
+    document.documentElement.classList.add(normalized);
+  }
+
+  function initializeTheme() {
+    let saved = "dark";
+    try {
+      saved = window.localStorage.getItem(THEME_KEY) || "dark";
+    } catch {
+      saved = "dark";
+    }
+    applyTheme(saved);
+
+    document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
+      if (button.dataset.themeReady === "true") {
+        return;
+      }
+      button.dataset.themeReady = "true";
+      button.addEventListener("click", () => {
+        const next = document.documentElement.classList.contains("dark") ? "light" : "dark";
+        applyTheme(next);
+        try {
+          window.localStorage.setItem(THEME_KEY, next);
+        } catch {
+          // Ignore private browsing or locked storage.
+        }
+      });
+    });
+  }
+
+  function openDrawer(id) {
+    const drawer = document.getElementById(id);
+    if (!drawer) {
+      return;
+    }
+    drawer.hidden = false;
+    document.body.classList.add("drawer-open");
+    const closeButton = drawer.querySelector("[data-drawer-close]");
+    if (closeButton) {
+      closeButton.focus();
+    }
+  }
+
+  function closeDrawer(id) {
+    const drawer = document.getElementById(id);
+    if (!drawer) {
+      return;
+    }
+    drawer.hidden = true;
+    document.body.classList.remove("drawer-open");
+  }
+
+  function initializeDrawers(root) {
+    root.querySelectorAll("[data-drawer-open]").forEach((button) => {
+      if (button.dataset.drawerReady === "true") {
+        return;
+      }
+      button.dataset.drawerReady = "true";
+      button.addEventListener("click", () => openDrawer(button.dataset.drawerOpen));
+    });
+
+    root.querySelectorAll("[data-drawer-close]").forEach((button) => {
+      if (button.dataset.drawerCloseReady === "true") {
+        return;
+      }
+      button.dataset.drawerCloseReady = "true";
+      button.addEventListener("click", () => closeDrawer(button.dataset.drawerClose));
+    });
+  }
+
+  function initializeShell() {
+    initializeTheme();
+    initializeDrawers(document);
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      document.querySelectorAll(".drawer:not([hidden])").forEach((drawer) => {
+        closeDrawer(drawer.id);
+      });
+    });
+  }
+
+  window.addEventListener("DOMContentLoaded", () => {
+    initializeShell();
+    initialize(document);
+  });
 })();
