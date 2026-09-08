@@ -1,12 +1,12 @@
 # ai-quota-monitor
 
-ai-quota-monitor is a planned self-hosted monitor and scheduler for two independently authenticated ChatGPT Plus/Codex accounts.
+ai-quota-monitor is a self-hosted monitor and scheduler for two independently authenticated ChatGPT Plus/Codex accounts.
 
 The project goal is to make Codex usage windows visible and predictable without using OpenAI API keys, scraping ChatGPT, or storing account credentials in the application database.
 
 ## Current Status
 
-Phase 5 app-server telemetry foundation is implemented.
+Phase 6 scheduler foundation is implemented.
 
 Local planning drafts may exist under `docs/`, but that directory is intentionally ignored and not tracked in Git.
 
@@ -24,6 +24,9 @@ The current application provides:
 - Codex SDK dependency and per-account auth status controls;
 - manual Codex anchor execution with persisted run history;
 - Codex app-server telemetry refresh with raw and normalized usage persistence;
+- APScheduler-backed daily and weekly anchor jobs;
+- schedule reload after dashboard schedule changes;
+- scheduler event logging;
 - startup migrations before default seeding;
 - pytest smoke tests.
 
@@ -32,7 +35,7 @@ The current application provides:
 - Isolated Codex authentication for Account A and Account B.
 - Current 5-hour quota usage and reset time.
 - Current weekly quota usage and reset time.
-- Configurable scheduled Codex anchor turns.
+- Smart validation around scheduled Codex anchor turns.
 - Persistent observed reset timestamps from Codex telemetry.
 - Schedule editor in the dashboard.
 - Anchor execution history and event logs.
@@ -120,6 +123,26 @@ Normalization identifies windows by `windowDurationMins`:
 
 If a later response is partial or sparse, missing normalized fields carry forward the previous known-good value for that account. If the app-server response shape changes and neither expected window can be found, the raw payload is still retained and the snapshot is marked `unsupported` rather than showing invented quota data.
 
+## Scheduler
+
+Phase 6 adds background anchor scheduling through APScheduler.
+
+On application startup, the scheduler reads account schedules from SQLite and creates:
+
+- one daily anchor job per enabled account when daily anchors are enabled;
+- one weekly target anchor job per enabled account.
+
+Daily jobs honor each account's weekday toggles, daily anchor time, and timezone. Weekly jobs honor each account's weekly target day, weekly target time, and timezone.
+
+When a schedule is saved from the dashboard, jobs are reloaded immediately without restarting the application. The dashboard shows scheduler status, active scheduled jobs, and the next run timestamp reported by APScheduler.
+
+Missed jobs follow the configured missed-anchor policy:
+
+- `run_if_within_grace` runs a missed job only if it is inside the configured grace window;
+- `skip_missed` skips jobs that were missed before the scheduler could run them.
+
+The scheduler calls the same `AnchorService` used by manual anchor runs, so account-scoped locking still prevents overlapping anchor runs for the same account. Scheduler starts, reloads, missed jobs, failures, skipped jobs, and completed scheduled anchors are recorded in `events`.
+
 ## Planned Stack
 
 - Python 3.10 or newer.
@@ -159,6 +182,7 @@ Currently implemented tables:
 - `anchor_runs`
 - `usage_raw`
 - `usage_snapshots`
+- `events`
 - `app_settings`
 
 ## Default Schedule
@@ -188,6 +212,12 @@ Implemented schedule fields:
 - account timezone;
 - active weekdays;
 - skip anchor when a 5-hour window is already active.
+
+Implemented scheduler settings:
+
+- scheduler enabled flag through `AI_QUOTA_MONITOR_ENABLE_SCHEDULER`;
+- missed-anchor policy through `AI_QUOTA_MONITOR_MISSED_ANCHOR_POLICY`;
+- missed-anchor grace window through `AI_QUOTA_MONITOR_MISSED_ANCHOR_GRACE_MINUTES`.
 
 ## Development Workflow
 
@@ -226,23 +256,23 @@ Short imperative summary
 
 ```text
 ai-quota-monitor/
-├── alembic/
-├── src/
-│   └── ai_quota_monitor/
-│       ├── __main__.py
-│       ├── config.py
-│       ├── database.py
-│       ├── main.py
-│       ├── models/
-│       ├── routes/
-│       ├── services/
-│       ├── static/
-│       └── templates/
-├── tests/
-├── pyproject.toml
-├── alembic.ini
-├── README.md
-└── SECURITY.md
+|-- alembic/
+|-- src/
+|   `-- ai_quota_monitor/
+|       |-- __main__.py
+|       |-- config.py
+|       |-- database.py
+|       |-- main.py
+|       |-- models/
+|       |-- routes/
+|       |-- services/
+|       |-- static/
+|       `-- templates/
+|-- tests/
+|-- pyproject.toml
+|-- alembic.ini
+|-- README.md
+`-- SECURITY.md
 ```
 
 ## Local Development

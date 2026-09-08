@@ -5,8 +5,8 @@
   <div>
     <h2 id="dashboard-title">Accounts and schedules</h2>
     <p>
-      Account setup, authentication, schedules, and manual anchor execution are available.
-      Live quota telemetry arrives in a later phase branch.
+      Account setup, authentication, quota telemetry, schedules, and anchor execution are available.
+      Scheduled anchors reload as soon as account schedules change.
     </p>
   </div>
 
@@ -22,6 +22,10 @@
     <div>
       <dt>Timezone</dt>
       <dd>{{ timezone }}</dd>
+    </div>
+    <div>
+      <dt>Scheduler</dt>
+      <dd>{{ "Running" if scheduler_running else "Stopped" }}</dd>
     </div>
   </dl>
 
@@ -244,6 +248,40 @@
     {% endfor %}
   </div>
 
+  <section class="history-panel" aria-labelledby="scheduler-title">
+    <div>
+      <p class="eyebrow">Automation</p>
+      <h3 id="scheduler-title">Scheduled anchors</h3>
+    </div>
+
+    {% if scheduled_jobs %}
+    <div class="history-table-wrap">
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th scope="col">Account</th>
+            <th scope="col">Job</th>
+            <th scope="col">Next run</th>
+            <th scope="col">Timezone</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for job in scheduled_jobs %}
+          <tr>
+            <td>{{ job.account_name }}</td>
+            <td>{{ job.kind | title }}</td>
+            <td>{{ job.next_run_at.strftime("%Y-%m-%d %H:%M:%S") if job.next_run_at else "-" }}</td>
+            <td>{{ job.timezone }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="empty-state">No scheduled anchors are active.</p>
+    {% endif %}
+  </section>
+
   <section class="history-panel" aria-labelledby="anchor-history-title">
     <div>
       <p class="eyebrow">History</p>
@@ -289,6 +327,46 @@
     </div>
     {% else %}
     <p class="empty-state">No anchor runs yet.</p>
+    {% endif %}
+  </section>
+
+  <section class="history-panel" aria-labelledby="event-history-title">
+    <div>
+      <p class="eyebrow">Events</p>
+      <h3 id="event-history-title">Recent events</h3>
+    </div>
+
+    {% if events %}
+    <div class="history-table-wrap">
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th scope="col">Level</th>
+            <th scope="col">Account</th>
+            <th scope="col">Category</th>
+            <th scope="col">When</th>
+            <th scope="col">Message</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for event in events %}
+          <tr>
+            <td>
+              <span class="event-level event-level--{{ event.level }}">
+                {{ event.level | title }}
+              </span>
+            </td>
+            <td>{{ event.account.name if event.account else "-" }}</td>
+            <td>{{ event.category }}</td>
+            <td>{{ event.created_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+            <td>{{ event.message }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="empty-state">No events yet.</p>
     {% endif %}
   </section>
 </section>

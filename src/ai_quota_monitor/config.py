@@ -19,8 +19,10 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     usage_poll_interval_minutes: int = 5
+    enable_scheduler: bool = True
     anchor_prompt: str = "Reply only with OK."
     anchor_verification_timeout_seconds: int = 60
+    missed_anchor_policy: str = "run_if_within_grace"
     missed_anchor_grace_minutes: int = 30
     history_retention_days: int = 90
 

@@ -455,6 +455,31 @@ button:disabled {
   color: #9b1c1c;
 }
 
+.event-level {
+  display: inline-flex;
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  background: #f0f4f8;
+  color: #3e4c59;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.event-level--info {
+  background: #e1effe;
+  color: #1a56db;
+}
+
+.event-level--warning {
+  background: #fff4d6;
+  color: #8a5a00;
+}
+
+.event-level--error {
+  background: #fdecea;
+  color: #9b1c1c;
+}
+
 .empty-state {
   margin-bottom: 0;
   color: #52616f;

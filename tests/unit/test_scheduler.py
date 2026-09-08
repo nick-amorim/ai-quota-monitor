@@ -1,0 +1,174 @@
+from __future__ import annotations
+
+from datetime import time
+
+from ai_quota_monitor.config import Settings
+from ai_quota_monitor.database import (
+    create_database_engine,
+    create_session_factory,
+    initialize_database,
+)
+from ai_quota_monitor.migrations import run_migrations
+from ai_quota_monitor.models import Account, EventLog
+from ai_quota_monitor.services.accounts import seed_defaults
+from ai_quota_monitor.services.anchors import (
+    AnchorAlreadyRunningError,
+    AnchorService,
+    AnchorTurnResult,
+    update_app_setting,
+)
+from ai_quota_monitor.services.scheduler import QuotaScheduler
+
+
+class FakeAnchorBackend:
+    def run_anchor(self, account, prompt):
+        return AnchorTurnResult(
+            status="completed",
+            thread_id=f"thread-{account.id}",
+            turn_id="turn-1",
+            final_response="OK",
+            token_usage={"input_tokens": 1, "output_tokens": 1},
+            duration_ms=10,
+        )
+
+
+class BusyAnchorService:
+    def run_manual_anchor(self, account_id: int):
+        raise AnchorAlreadyRunningError(f"Anchor already running for account {account_id}")
+
+
+def make_scheduler(tmp_path, anchor_service=None):
+    settings = Settings(
+        database_url=f"sqlite:///{tmp_path / 'ai-quota-monitor.sqlite3'}",
+        data_dir=tmp_path,
+        missed_anchor_grace_minutes=30,
+    )
+    run_migrations(settings)
+    engine = create_database_engine(settings)
+    initialize_database(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        seed_defaults(session, settings)
+        for account in session.query(Account).all():
+            account.auth_status = "connected"
+        session.commit()
+
+    if anchor_service is None:
+        anchor_service = AnchorService(session_factory, settings, FakeAnchorBackend)
+
+    scheduler = QuotaScheduler(session_factory, anchor_service, settings)
+    scheduler.start()
+    return engine, session_factory, scheduler
+
+
+def test_scheduler_creates_database_driven_daily_and_weekly_jobs(tmp_path):
+    engine, session_factory, scheduler = make_scheduler(tmp_path)
+
+    try:
+        jobs = scheduler.next_runs()
+        job_keys = {(job.account_name, job.kind) for job in jobs}
+
+        assert job_keys == {
+            ("Account A", "daily"),
+            ("Account A", "weekly"),
+            ("Account B", "daily"),
+            ("Account B", "weekly"),
+        }
+        assert all(job.next_run_at is not None for job in jobs)
+        assert all(
+            job.misfire_grace_time == 30 * 60
+            for job in scheduler._scheduler.get_jobs()
+        )
+
+        with session_factory() as session:
+            events = session.query(EventLog).all()
+
+        assert any(event.message == "Scheduler jobs reloaded" for event in events)
+    finally:
+        scheduler.shutdown()
+        engine.dispose()
+
+
+def test_scheduler_reload_reflects_schedule_changes_without_restart(tmp_path):
+    engine, session_factory, scheduler = make_scheduler(tmp_path)
+
+    try:
+        with session_factory() as session:
+            account = session.get(Account, 1)
+            assert account is not None
+            assert account.schedule is not None
+            account.schedule.daily_anchor_time = time(6, 30)
+            account.schedule.monday_enabled = True
+            account.schedule.tuesday_enabled = False
+            account.schedule.wednesday_enabled = False
+            account.schedule.thursday_enabled = False
+            account.schedule.friday_enabled = False
+            session.commit()
+
+        scheduler.reload()
+        daily = next(
+            job
+            for job in scheduler.next_runs()
+            if job.account_id == 1 and job.kind == "daily"
+        )
+
+        assert daily.next_run_at is not None
+        assert daily.next_run_at.hour == 6
+        assert daily.next_run_at.minute == 30
+    finally:
+        scheduler.shutdown()
+        engine.dispose()
+
+
+def test_scheduler_skip_missed_policy_uses_minimal_grace(tmp_path):
+    engine, session_factory, scheduler = make_scheduler(tmp_path)
+
+    try:
+        with session_factory() as session:
+            update_app_setting(session, "missed_anchor_policy", "skip_missed")
+
+        scheduler.reload()
+
+        assert all(job.misfire_grace_time == 1 for job in scheduler._scheduler.get_jobs())
+    finally:
+        scheduler.shutdown()
+        engine.dispose()
+
+
+def test_scheduled_anchor_job_records_success_events(tmp_path):
+    engine, session_factory, scheduler = make_scheduler(tmp_path)
+
+    try:
+        scheduler.run_anchor_job(1, "daily")
+
+        with session_factory() as session:
+            messages = [event.message for event in session.query(EventLog).all()]
+
+        assert "Scheduled daily anchor started" in messages
+        assert "Scheduled daily anchor completed" in messages
+    finally:
+        scheduler.shutdown()
+        engine.dispose()
+
+
+def test_scheduled_anchor_job_logs_concurrency_skip(tmp_path):
+    engine, session_factory, scheduler = make_scheduler(
+        tmp_path,
+        anchor_service=BusyAnchorService(),
+    )
+
+    try:
+        scheduler.run_anchor_job(1, "weekly")
+
+        with session_factory() as session:
+            event = (
+                session.query(EventLog)
+                .filter(EventLog.message.like("%skipped because another run is active"))
+                .one()
+            )
+
+        assert event.level == "warning"
+        assert event.account_id == 1
+    finally:
+        scheduler.shutdown()
+        engine.dispose()

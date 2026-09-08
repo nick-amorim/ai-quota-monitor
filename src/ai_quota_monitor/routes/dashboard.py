@@ -16,6 +16,7 @@ from ai_quota_monitor.services.accounts import (
     update_account_schedule,
 )
 from ai_quota_monitor.services.anchors import get_app_setting, update_app_setting
+from ai_quota_monitor.services.events import recent_events
 
 
 def register_routes(templates: Jinja2Templates) -> APIRouter:
@@ -47,6 +48,9 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 "usage_by_account": (
                     request.app.state.telemetry_service.latest_snapshots_by_account()
                 ),
+                "scheduler_running": request.app.state.quota_scheduler.running,
+                "scheduled_jobs": request.app.state.quota_scheduler.next_runs(),
+                "events": recent_events(session_factory, limit=8),
             },
         )
 
@@ -86,6 +90,7 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 skip_if_window_active=_checkbox(form, "skip_if_window_active"),
             )
 
+        request.app.state.quota_scheduler.reload()
         return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
 
     @router.post("/accounts/{account_id}/auth/device-login")
