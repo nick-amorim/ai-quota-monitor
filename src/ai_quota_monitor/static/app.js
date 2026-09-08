@@ -17,26 +17,35 @@
       return;
     }
 
-    const response = await fetch(url, {
-      headers: { "HX-Request": "true" },
-    });
-    if (!response.ok) {
-      return;
-    }
+    element.dataset.refreshState = "loading";
 
-    const html = await response.text();
-    if (element.getAttribute("hx-swap") === "outerHTML") {
-      const template = document.createElement("template");
-      template.innerHTML = html.trim();
-      const replacement = template.content.firstElementChild;
-      if (replacement) {
-        element.replaceWith(replacement);
-        initialize(replacement);
+    try {
+      const response = await fetch(url, {
+        headers: { "HX-Request": "true" },
+      });
+      if (!response.ok) {
+        element.dataset.refreshState = "error";
+        return;
       }
-      return;
+
+      const html = await response.text();
+      if (element.getAttribute("hx-swap") === "outerHTML") {
+        const template = document.createElement("template");
+        template.innerHTML = html.trim();
+        const replacement = template.content.firstElementChild;
+        if (replacement) {
+          replacement.dataset.refreshState = "idle";
+          element.replaceWith(replacement);
+          initialize(replacement);
+        }
+        return;
+      }
+      element.innerHTML = html;
+      element.dataset.refreshState = "idle";
+      initialize(element);
+    } catch {
+      element.dataset.refreshState = "error";
     }
-    element.innerHTML = html;
-    initialize(element);
   }
 
   function initialize(root) {

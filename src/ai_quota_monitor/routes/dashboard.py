@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import time
+from datetime import UTC, datetime, time
 from urllib.parse import parse_qs
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -17,6 +17,7 @@ from ai_quota_monitor.services.accounts import (
 )
 from ai_quota_monitor.services.anchors import get_app_setting, update_app_setting
 from ai_quota_monitor.services.events import EventFilters, list_events, recent_events
+from ai_quota_monitor.services.monitor import MonitorView, build_monitor_view
 
 
 def register_routes(templates: Jinja2Templates) -> APIRouter:
@@ -32,6 +33,9 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 "anchor_prompt",
                 request.app.state.settings.anchor_prompt,
             )
+        usage_by_account = request.app.state.telemetry_service.latest_snapshots_by_account()
+        scheduled_jobs = request.app.state.quota_scheduler.next_runs()
+        monitor_view = _monitor_view(request, accounts, usage_by_account, scheduled_jobs)
 
         return templates.TemplateResponse(
             request,
@@ -45,11 +49,11 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 "login_attempts": request.app.state.auth_manager.login_snapshots(),
                 "anchor_prompt": anchor_prompt,
                 "anchor_runs": request.app.state.anchor_service.recent_runs(limit=8),
-                "usage_by_account": (
-                    request.app.state.telemetry_service.latest_snapshots_by_account()
-                ),
+                "usage_by_account": usage_by_account,
+                "account_views": monitor_view.account_map,
+                "timeline": monitor_view.timeline,
                 "scheduler_running": request.app.state.quota_scheduler.running,
-                "scheduled_jobs": request.app.state.quota_scheduler.next_runs(),
+                "scheduled_jobs": scheduled_jobs,
                 "events": recent_events(session_factory, limit=8),
             },
         )
@@ -92,6 +96,62 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
             },
         )
 
+    @router.get("/monitor", response_class=HTMLResponse)
+    async def monitor(request: Request) -> HTMLResponse:
+        monitor_view = _load_monitor_view(request)
+        return templates.TemplateResponse(
+            request,
+            "monitor.html",
+            {
+                "app_name": request.app.state.settings.app_name,
+                "version": __version__,
+                "body_class": "monitor-body",
+                "monitor_view": monitor_view,
+                "refresh_path": "/partials/monitor",
+                "account_slug": None,
+            },
+        )
+
+    @router.get("/monitor/{account_slug}", response_class=HTMLResponse)
+    async def account_monitor(account_slug: str, request: Request) -> HTMLResponse:
+        monitor_view = _load_monitor_view(request, account_slug=account_slug)
+        return templates.TemplateResponse(
+            request,
+            "monitor.html",
+            {
+                "app_name": request.app.state.settings.app_name,
+                "version": __version__,
+                "body_class": "monitor-body",
+                "monitor_view": monitor_view,
+                "refresh_path": f"/partials/monitor/{account_slug}",
+                "account_slug": account_slug,
+            },
+        )
+
+    @router.get("/partials/monitor", response_class=HTMLResponse)
+    async def monitor_partial(request: Request) -> HTMLResponse:
+        monitor_view = _load_monitor_view(request)
+        return templates.TemplateResponse(
+            request,
+            "_monitor_content.html",
+            {
+                "monitor_view": monitor_view,
+                "refresh_path": "/partials/monitor",
+            },
+        )
+
+    @router.get("/partials/monitor/{account_slug}", response_class=HTMLResponse)
+    async def account_monitor_partial(account_slug: str, request: Request) -> HTMLResponse:
+        monitor_view = _load_monitor_view(request, account_slug=account_slug)
+        return templates.TemplateResponse(
+            request,
+            "_monitor_content.html",
+            {
+                "monitor_view": monitor_view,
+                "refresh_path": f"/partials/monitor/{account_slug}",
+            },
+        )
+
     @router.get("/partials/accounts/{account_id}/usage", response_class=HTMLResponse)
     async def account_usage_partial(account_id: int, request: Request) -> HTMLResponse:
         session_factory = request.app.state.session_factory
@@ -99,15 +159,21 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
             account = get_account(session, account_id)
             if account is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        usage_by_account = request.app.state.telemetry_service.latest_snapshots_by_account()
+        monitor_view = _monitor_view(
+            request,
+            [account],
+            usage_by_account,
+            request.app.state.quota_scheduler.next_runs(),
+        )
 
         return templates.TemplateResponse(
             request,
             "_account_usage.html",
             {
                 "account": account,
-                "usage_by_account": (
-                    request.app.state.telemetry_service.latest_snapshots_by_account()
-                ),
+                "usage_by_account": usage_by_account,
+                "account_views": monitor_view.account_map,
             },
         )
 
@@ -293,3 +359,41 @@ def _optional_choice(value: str | None, allowed: set[str]) -> str | None:
             detail=f"Invalid choice: {value}",
         )
     return normalized
+
+
+def _load_monitor_view(
+    request: Request,
+    *,
+    account_slug: str | None = None,
+) -> MonitorView:
+    session_factory = request.app.state.session_factory
+    with session_factory() as session:
+        accounts = list_accounts(session)
+
+    if account_slug is not None:
+        accounts = [account for account in accounts if account.slug == account_slug]
+        if not accounts:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    usage_by_account = request.app.state.telemetry_service.latest_snapshots_by_account()
+    scheduled_jobs = [
+        job
+        for job in request.app.state.quota_scheduler.next_runs()
+        if account_slug is None or any(account.id == job.account_id for account in accounts)
+    ]
+    return _monitor_view(request, accounts, usage_by_account, scheduled_jobs)
+
+
+def _monitor_view(
+    request: Request,
+    accounts,
+    usage_by_account,
+    scheduled_jobs,
+) -> MonitorView:
+    return build_monitor_view(
+        accounts=accounts,
+        usage_by_account=usage_by_account,
+        scheduled_jobs=scheduled_jobs,
+        settings=request.app.state.settings,
+        now=datetime.now(UTC),
+    )

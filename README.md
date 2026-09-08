@@ -6,7 +6,7 @@ The project goal is to make Codex usage windows visible and predictable without 
 
 ## Current Status
 
-Phase 8 events and live dashboard updates are implemented.
+Phase 9 timeline, compact monitor view, and dashboard polish are implemented.
 
 Local planning drafts may exist under `docs/`, but that directory is intentionally ignored and not tracked in Git.
 
@@ -32,12 +32,17 @@ The current application provides:
 - app-server rate-limit update notification ingestion;
 - refreshable dashboard sections for usage, scheduler status, and recent events;
 - filterable event history at `/history`;
+- current-day timeline for anchors and reset events;
+- compact always-on monitor view at `/monitor`;
+- single-account compact monitor views at `/monitor/{account_slug}`;
+- reset display that separates configured, expected, and observed timing;
+- weekly reset drift indicators;
+- empty, loading, error, and stale telemetry states;
 - startup migrations before default seeding;
 - pytest smoke tests.
 
 ## Remaining Planned Features
 
-- Compact `/monitor` view for tiny always-on displays.
 - Proxmox LXC deployment.
 - Docker Compose deployment.
 - Safe update flow that preserves SQLite data and Codex authentication homes.
@@ -180,6 +185,39 @@ http://127.0.0.1:8080/history
 ```
 
 History can be filtered by account, severity level, and category prefix. Telemetry notification lifecycle events, scheduler events, smart-anchor decisions, and anchor failures are persisted there for debugging without mixing operational noise into the main account cards.
+
+## Timeline and Compact Monitor
+
+The management dashboard includes a current-day timeline for:
+
+- scheduled daily and weekly anchors;
+- expected 5-hour and weekly reset times;
+- observed 5-hour and weekly reset times from the latest Codex telemetry.
+
+The compact monitor is available at:
+
+```text
+http://127.0.0.1:8080/monitor
+```
+
+Single-account monitor views are available by slug:
+
+```text
+http://127.0.0.1:8080/monitor/account-a
+http://127.0.0.1:8080/monitor/account-b
+```
+
+The compact monitor avoids tables and fixed-width content so it can run on small always-on displays. It refreshes itself every 15 seconds through server-rendered partials.
+
+Each quota window shows:
+
+- current usage percentage when telemetry exists;
+- configured schedule target;
+- expected reset time;
+- observed reset time;
+- status for waiting, active, stale, warning, high, and unsupported telemetry states.
+
+The weekly window also shows a drift indicator comparing observed reset timing to the expected schedule.
 
 ## Planned Stack
 
@@ -346,8 +384,12 @@ Available routes:
 | Route | Purpose |
 | --- | --- |
 | `/` | Account and schedule dashboard |
+| `/monitor` | Compact all-account monitor |
+| `/monitor/{account_slug}` | Compact single-account monitor |
 | `/history` | Filterable event history |
 | `/health` | JSON health check with database status |
+| `/partials/monitor` | Refreshable compact monitor partial |
+| `/partials/monitor/{account_slug}` | Refreshable single-account monitor partial |
 | `/partials/accounts/{account_id}/usage` | Refreshable account usage partial |
 | `/partials/scheduler` | Refreshable scheduled jobs partial |
 | `/partials/events/recent` | Refreshable recent events partial |
