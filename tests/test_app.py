@@ -55,11 +55,33 @@ class FakeAnchorBackend:
         )
 
 
+class FakeTelemetryBackend:
+    def read_account(self, account):
+        return {"requiresOpenaiAuth": False}
+
+    def read_rate_limits(self, account):
+        return {
+            "rateLimits": {
+                "primary": {
+                    "usedPercent": 72,
+                    "resetsAt": 1798797600,
+                    "windowDurationMins": 300,
+                },
+                "secondary": {
+                    "usedPercent": 43,
+                    "resetsAt": 1799110800,
+                    "windowDurationMins": 10080,
+                },
+            }
+        }
+
+
 def make_app(tmp_path):
     return create_app(
         make_settings(tmp_path),
         auth_backend_factory=FakeAuthBackend,
         anchor_backend_factory=FakeAnchorBackend,
+        telemetry_backend_factory=FakeTelemetryBackend,
     )
 
 
@@ -145,6 +167,7 @@ def test_schedule_update_persists_after_restart(tmp_path):
         settings,
         auth_backend_factory=FakeAuthBackend,
         anchor_backend_factory=FakeAnchorBackend,
+        telemetry_backend_factory=FakeTelemetryBackend,
     )
     with TestClient(app) as client:
         response = client.post(
@@ -225,6 +248,7 @@ def test_manual_anchor_route_records_history(tmp_path):
         settings,
         auth_backend_factory=FakeAuthBackend,
         anchor_backend_factory=FakeAnchorBackend,
+        telemetry_backend_factory=FakeTelemetryBackend,
     )
 
     with TestClient(app) as client:
@@ -239,3 +263,19 @@ def test_manual_anchor_route_records_history(tmp_path):
     assert "Recent anchor runs" in dashboard.text
     assert "Completed" in dashboard.text
     assert "OK" in dashboard.text
+
+
+def test_usage_refresh_route_records_quota_snapshot(tmp_path):
+    app = make_app(tmp_path)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/accounts/1/usage/refresh",
+            follow_redirects=False,
+        )
+        dashboard = client.get("/")
+
+    assert response.status_code == 303
+    assert "Quota telemetry" in dashboard.text
+    assert "72" in dashboard.text
+    assert "43" in dashboard.text

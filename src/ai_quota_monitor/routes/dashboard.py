@@ -44,6 +44,9 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 "login_attempts": request.app.state.auth_manager.login_snapshots(),
                 "anchor_prompt": anchor_prompt,
                 "anchor_runs": request.app.state.anchor_service.recent_runs(limit=8),
+                "usage_by_account": (
+                    request.app.state.telemetry_service.latest_snapshots_by_account()
+                ),
             },
         )
 
@@ -135,6 +138,23 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
         except Exception:
             pass
 
+        return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+
+    @router.post("/accounts/{account_id}/usage/refresh")
+    async def refresh_account_usage(account_id: int, request: Request) -> RedirectResponse:
+        try:
+            await asyncio.to_thread(
+                request.app.state.telemetry_service.refresh_account_usage,
+                account_id,
+            )
+        except KeyError:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from None
+
+        return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+
+    @router.post("/usage/refresh-all")
+    async def refresh_all_usage(request: Request) -> RedirectResponse:
+        await asyncio.to_thread(request.app.state.telemetry_service.refresh_all_accounts)
         return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
 
     return router

@@ -30,6 +30,11 @@ from ai_quota_monitor.services.codex_auth import (
     CodexAuthManager,
     OpenAiCodexAuthBackend,
 )
+from ai_quota_monitor.services.telemetry import (
+    CodexAppServerTelemetryBackend,
+    TelemetryBackend,
+    TelemetryService,
+)
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(PACKAGE_DIR / "templates"))
@@ -39,6 +44,10 @@ def create_app(
     settings: Settings | None = None,
     auth_backend_factory: Callable[[], CodexAuthBackend] = OpenAiCodexAuthBackend,
     anchor_backend_factory: Callable[[], CodexAnchorBackend] = CodexSdkAnchorBackend,
+    telemetry_backend_factory: Callable[
+        [],
+        TelemetryBackend,
+    ] = CodexAppServerTelemetryBackend,
 ) -> FastAPI:
     app_settings = settings or get_settings()
 
@@ -62,6 +71,10 @@ def create_app(
             session_factory,
             app_settings,
             backend_factory=anchor_backend_factory,
+        )
+        app.state.telemetry_service = TelemetryService(
+            session_factory,
+            backend_factory=telemetry_backend_factory,
         )
         try:
             yield
