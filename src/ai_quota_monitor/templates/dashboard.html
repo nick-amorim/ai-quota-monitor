@@ -105,9 +105,11 @@
             <strong>
               {{ usage.five_hour_used_percent | round(1) if usage.five_hour_used_percent is not none else "-" }}%
             </strong>
-            <small>
-              Reset:
-              {{ usage.five_hour_reset_at.strftime("%Y-%m-%d %H:%M:%S") if usage.five_hour_reset_at else "Unknown" }}
+            <small>Observed reset:
+              {{ usage.five_hour_observed_reset_at.strftime("%Y-%m-%d %H:%M:%S") if usage.five_hour_observed_reset_at else "Unknown" }}
+            </small>
+            <small>Expected reset:
+              {{ usage.five_hour_expected_reset_at.strftime("%Y-%m-%d %H:%M:%S") if usage.five_hour_expected_reset_at else "Unknown" }}
             </small>
           </div>
           <div class="usage-window">
@@ -115,9 +117,11 @@
             <strong>
               {{ usage.weekly_used_percent | round(1) if usage.weekly_used_percent is not none else "-" }}%
             </strong>
-            <small>
-              Reset:
-              {{ usage.weekly_reset_at.strftime("%Y-%m-%d %H:%M:%S") if usage.weekly_reset_at else "Unknown" }}
+            <small>Observed reset:
+              {{ usage.weekly_observed_reset_at.strftime("%Y-%m-%d %H:%M:%S") if usage.weekly_observed_reset_at else "Unknown" }}
+            </small>
+            <small>Expected reset:
+              {{ usage.weekly_expected_reset_at.strftime("%Y-%m-%d %H:%M:%S") if usage.weekly_expected_reset_at else "Unknown" }}
             </small>
           </div>
         </div>

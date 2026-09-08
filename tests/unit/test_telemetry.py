@@ -97,6 +97,16 @@ def test_refresh_account_usage_persists_raw_and_normalized_snapshot(tmp_path):
     assert result.snapshot is not None
     assert result.snapshot.five_hour_used_percent == 72
     assert result.snapshot.weekly_used_percent == 43
+    assert _as_utc(result.snapshot.five_hour_observed_reset_at) == datetime.fromtimestamp(
+        1798797600,
+        UTC,
+    )
+    assert _as_utc(result.snapshot.weekly_observed_reset_at) == datetime.fromtimestamp(
+        1799110800,
+        UTC,
+    )
+    assert result.snapshot.five_hour_expected_reset_at is not None
+    assert result.snapshot.weekly_expected_reset_at is not None
 
     with session_factory() as session:
         raw = session.query(UsageRaw).one()
@@ -151,3 +161,9 @@ def test_refresh_all_accounts_isolates_backend_failure(tmp_path):
         assert session.query(UsageRaw).count() == 1
         assert session.query(UsageSnapshot).count() == 1
     engine.dispose()
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)

@@ -32,6 +32,7 @@ from ai_quota_monitor.services.codex_auth import (
     OpenAiCodexAuthBackend,
 )
 from ai_quota_monitor.services.scheduler import SchedulerService, QuotaScheduler
+from ai_quota_monitor.services.smart_anchors import SmartAnchorService
 from ai_quota_monitor.services.telemetry import (
     CodexAppServerTelemetryBackend,
     TelemetryBackend,
@@ -51,7 +52,7 @@ def create_app(
         TelemetryBackend,
     ] = CodexAppServerTelemetryBackend,
     scheduler_factory: Callable[
-        [sessionmaker[Session], AnchorService, Settings],
+        [sessionmaker[Session], SmartAnchorService, Settings],
         SchedulerService,
     ] = QuotaScheduler,
 ) -> FastAPI:
@@ -82,9 +83,15 @@ def create_app(
             session_factory,
             backend_factory=telemetry_backend_factory,
         )
+        app.state.smart_anchor_service = SmartAnchorService(
+            session_factory,
+            app_settings,
+            app.state.anchor_service,
+            app.state.telemetry_service,
+        )
         app.state.quota_scheduler = scheduler_factory(
             session_factory,
-            app.state.anchor_service,
+            app.state.smart_anchor_service,
             app_settings,
         )
         if app_settings.enable_scheduler:

@@ -36,10 +36,22 @@ class UsageSnapshot(Base):
     five_hour_used_percent: Mapped[float | None] = mapped_column(Float)
     five_hour_window_minutes: Mapped[int | None] = mapped_column(Integer)
     five_hour_reset_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    five_hour_expected_reset_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    five_hour_observed_reset_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
 
     weekly_used_percent: Mapped[float | None] = mapped_column(Float)
     weekly_window_minutes: Mapped[int | None] = mapped_column(Integer)
     weekly_reset_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    weekly_expected_reset_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    weekly_observed_reset_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
 
     parser_status: Mapped[str] = mapped_column(String(32), nullable=False)
     parser_message: Mapped[str | None] = mapped_column(Text)

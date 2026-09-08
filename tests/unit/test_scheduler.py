@@ -11,33 +11,35 @@ from ai_quota_monitor.database import (
 from ai_quota_monitor.migrations import run_migrations
 from ai_quota_monitor.models import Account, EventLog
 from ai_quota_monitor.services.accounts import seed_defaults
-from ai_quota_monitor.services.anchors import (
-    AnchorAlreadyRunningError,
-    AnchorService,
-    AnchorTurnResult,
-    update_app_setting,
-)
+from ai_quota_monitor.services.anchors import AnchorAlreadyRunningError, update_app_setting
 from ai_quota_monitor.services.scheduler import QuotaScheduler
+from ai_quota_monitor.services.smart_anchors import SmartAnchorResult
 
 
-class FakeAnchorBackend:
-    def run_anchor(self, account, prompt):
-        return AnchorTurnResult(
-            status="completed",
-            thread_id=f"thread-{account.id}",
-            turn_id="turn-1",
-            final_response="OK",
-            token_usage={"input_tokens": 1, "output_tokens": 1},
-            duration_ms=10,
+class FakeScheduledAnchorRunner:
+    def __init__(self, decision: str = "sent", verification_status: str = "verified"):
+        self.calls = []
+        self.decision = decision
+        self.verification_status = verification_status
+
+    def run_scheduled_anchor(self, account_id: int, kind: str):
+        self.calls.append((account_id, kind))
+        return SmartAnchorResult(
+            account_id=account_id,
+            kind=kind,
+            decision=self.decision,
+            reason="test runner",
+            verification_status=self.verification_status,
+            anchor_run_id=1 if self.decision == "sent" else None,
         )
 
 
 class BusyAnchorService:
-    def run_manual_anchor(self, account_id: int):
+    def run_scheduled_anchor(self, account_id: int, kind: str):
         raise AnchorAlreadyRunningError(f"Anchor already running for account {account_id}")
 
 
-def make_scheduler(tmp_path, anchor_service=None):
+def make_scheduler(tmp_path, anchor_runner=None):
     settings = Settings(
         database_url=f"sqlite:///{tmp_path / 'ai-quota-monitor.sqlite3'}",
         data_dir=tmp_path,
@@ -53,16 +55,16 @@ def make_scheduler(tmp_path, anchor_service=None):
             account.auth_status = "connected"
         session.commit()
 
-    if anchor_service is None:
-        anchor_service = AnchorService(session_factory, settings, FakeAnchorBackend)
+    if anchor_runner is None:
+        anchor_runner = FakeScheduledAnchorRunner()
 
-    scheduler = QuotaScheduler(session_factory, anchor_service, settings)
+    scheduler = QuotaScheduler(session_factory, anchor_runner, settings)
     scheduler.start()
-    return engine, session_factory, scheduler
+    return engine, session_factory, scheduler, anchor_runner
 
 
 def test_scheduler_creates_database_driven_daily_and_weekly_jobs(tmp_path):
-    engine, session_factory, scheduler = make_scheduler(tmp_path)
+    engine, session_factory, scheduler, _ = make_scheduler(tmp_path)
 
     try:
         jobs = scheduler.next_runs()
@@ -90,7 +92,7 @@ def test_scheduler_creates_database_driven_daily_and_weekly_jobs(tmp_path):
 
 
 def test_scheduler_reload_reflects_schedule_changes_without_restart(tmp_path):
-    engine, session_factory, scheduler = make_scheduler(tmp_path)
+    engine, session_factory, scheduler, _ = make_scheduler(tmp_path)
 
     try:
         with session_factory() as session:
@@ -121,7 +123,7 @@ def test_scheduler_reload_reflects_schedule_changes_without_restart(tmp_path):
 
 
 def test_scheduler_skip_missed_policy_uses_minimal_grace(tmp_path):
-    engine, session_factory, scheduler = make_scheduler(tmp_path)
+    engine, session_factory, scheduler, _ = make_scheduler(tmp_path)
 
     try:
         with session_factory() as session:
@@ -136,7 +138,7 @@ def test_scheduler_skip_missed_policy_uses_minimal_grace(tmp_path):
 
 
 def test_scheduled_anchor_job_records_success_events(tmp_path):
-    engine, session_factory, scheduler = make_scheduler(tmp_path)
+    engine, session_factory, scheduler, runner = make_scheduler(tmp_path)
 
     try:
         scheduler.run_anchor_job(1, "daily")
@@ -146,15 +148,16 @@ def test_scheduled_anchor_job_records_success_events(tmp_path):
 
         assert "Scheduled daily anchor started" in messages
         assert "Scheduled daily anchor completed" in messages
+        assert runner.calls == [(1, "daily")]
     finally:
         scheduler.shutdown()
         engine.dispose()
 
 
 def test_scheduled_anchor_job_logs_concurrency_skip(tmp_path):
-    engine, session_factory, scheduler = make_scheduler(
+    engine, session_factory, scheduler, _ = make_scheduler(
         tmp_path,
-        anchor_service=BusyAnchorService(),
+        anchor_runner=BusyAnchorService(),
     )
 
     try:
