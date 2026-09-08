@@ -35,6 +35,59 @@
 
   {% include "_timeline.html" %}
 
+  <section class="settings-panel system-panel" aria-labelledby="system-update-title">
+    <div class="panel-heading-row">
+      <div>
+        <p class="eyebrow">System</p>
+        <h3 id="system-update-title">Deployment and updates</h3>
+      </div>
+      <span class="deployment-badge deployment-badge--{{ system_info.deployment_mode }}">
+        {{ system_info.deployment_mode | title }}
+      </span>
+    </div>
+
+    <dl class="system-grid">
+      <div>
+        <dt>Current</dt>
+        <dd>
+          {{ system_info.current_branch or "Unknown" }}
+          {% if system_info.current_commit %}@ {{ system_info.current_commit }}{% endif %}
+        </dd>
+      </div>
+      <div>
+        <dt>Upstream</dt>
+        <dd>{{ system_info.upstream_commit or "Unknown" }}</dd>
+      </div>
+      <div>
+        <dt>Data</dt>
+        <dd>{{ system_info.data_dir }}</dd>
+      </div>
+      <div>
+        <dt>Backups</dt>
+        <dd>{{ system_info.backup_dir }}</dd>
+      </div>
+    </dl>
+
+    <p class="system-message">{{ system_info.update_message }}</p>
+
+    <div class="system-actions">
+      <form method="post" action="/api/system/update">
+        <input type="hidden" name="dry_run" value="true">
+        <button type="submit" class="secondary-button">Check update plan</button>
+      </form>
+      <form method="post" action="/api/system/update">
+        <input type="hidden" name="dry_run" value="false">
+        <input type="hidden" name="restart" value="true">
+        <button
+          type="submit"
+          {% if not system_info.web_updates_enabled or system_info.deployment_mode == "docker" %}disabled{% endif %}
+        >
+          Run update
+        </button>
+      </form>
+    </div>
+  </section>
+
   <section class="settings-panel" aria-labelledby="anchor-settings-title">
     <div>
       <p class="eyebrow">Anchor execution</p>

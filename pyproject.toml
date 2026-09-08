@@ -28,6 +28,9 @@ dev = [
 
 [project.scripts]
 ai-quota-monitor = "ai_quota_monitor.__main__:main"
+ai-quota-monitor-update = "ai_quota_monitor.update:main"
+quotapilot-update = "ai_quota_monitor.update:main"
+update = "ai_quota_monitor.update:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

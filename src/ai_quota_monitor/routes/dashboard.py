@@ -36,6 +36,7 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
         usage_by_account = request.app.state.telemetry_service.latest_snapshots_by_account()
         scheduled_jobs = request.app.state.quota_scheduler.next_runs()
         monitor_view = _monitor_view(request, accounts, usage_by_account, scheduled_jobs)
+        system_info = request.app.state.system_service.info()
 
         return templates.TemplateResponse(
             request,
@@ -54,6 +55,7 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 "timeline": monitor_view.timeline,
                 "scheduler_running": request.app.state.quota_scheduler.running,
                 "scheduled_jobs": scheduled_jobs,
+                "system_info": system_info,
                 "events": recent_events(session_factory, limit=8),
             },
         )
