@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -13,6 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from ai_quota_monitor.models import Account
 
 CODEX_API_KEY_ENV_VARS = ("CODEX_API_KEY", "OPENAI_API_KEY")
+logger = logging.getLogger(__name__)
 
 
 def codex_runtime_paths(account: Account) -> tuple[Path, Path]:
@@ -104,6 +106,10 @@ class CodexAuthManager:
         self._backend_factory = backend_factory
         self._active_logins: dict[int, _ActiveLogin] = {}
         self._lock = threading.Lock()
+        self._status_change_callback: Callable[[], None] | None = None
+
+    def set_status_change_callback(self, callback: Callable[[], None]) -> None:
+        self._status_change_callback = callback
 
     def login_snapshots(self) -> dict[int, LoginSnapshot]:
         with self._lock:
@@ -128,6 +134,7 @@ class CodexAuthManager:
             try:
                 attempt = backend.start_device_login(account)
             except Exception:
+                logger.exception("Failed to start device login for account %s", account_id)
                 account.auth_status = "auth_failed"
                 account.last_auth_check = datetime.now(UTC)
                 session.commit()
@@ -172,6 +179,7 @@ class CodexAuthManager:
 
         login.attempt.cancel()
         self._update_status(account_id, "not_configured")
+        self._notify_status_change(account_id)
         return True
 
     def refresh_status(self, account_id: int) -> CodexAccountInfo:
@@ -183,6 +191,7 @@ class CodexAuthManager:
             try:
                 info = self._backend_factory().read_account(account)
             except Exception:
+                logger.exception("Failed to refresh auth status for account %s", account_id)
                 account.auth_status = "auth_failed"
                 account.last_auth_check = datetime.now(UTC)
                 session.commit()
@@ -190,6 +199,7 @@ class CodexAuthManager:
 
             self._apply_account_info(session, account, info)
             session.commit()
+            self._notify_status_change(account_id)
             return info
 
     def logout(self, account_id: int) -> None:
@@ -210,6 +220,7 @@ class CodexAuthManager:
             account.plan_type = None
             account.last_auth_check = datetime.now(UTC)
             session.commit()
+        self._notify_status_change(account_id)
 
     def _wait_for_login(
         self,
@@ -231,8 +242,11 @@ class CodexAuthManager:
                     account.auth_status = "auth_failed"
                     account.last_auth_check = datetime.now(UTC)
                 session.commit()
+                self._notify_status_change(account_id)
         except Exception:
+            logger.exception("Device login wait failed for account %s", account_id)
             self._update_status(account_id, "auth_failed")
+            self._notify_status_change(account_id)
         finally:
             backend.close_login_attempt(attempt)
             with self._lock:
@@ -248,6 +262,15 @@ class CodexAuthManager:
             account.auth_status = auth_status
             account.last_auth_check = datetime.now(UTC)
             session.commit()
+
+    def _notify_status_change(self, account_id: int) -> None:
+        callback = self._status_change_callback
+        if callback is None:
+            return
+        try:
+            callback()
+        except Exception:
+            logger.exception("Auth status callback failed for account %s", account_id)
 
     def _apply_account_info(
         self,

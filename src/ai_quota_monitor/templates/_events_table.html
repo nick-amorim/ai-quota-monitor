@@ -18,10 +18,19 @@
             {{ event.level | title }}
           </span>
         </td>
-        <td>{{ event.account.name if event.account else "-" }}</td>
+        <td>{{ (event.account.account_display or event.account.name) if event.account else "-" }}</td>
         <td>{{ event.category }}</td>
         <td>{{ event.created_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
-        <td>{{ event.message }}</td>
+        <td>
+          {% if event.payload_json %}
+          <details class="event-details">
+            <summary>{{ event.message }}</summary>
+            <pre>{{ event.payload_json }}</pre>
+          </details>
+          {% else %}
+          {{ event.message }}
+          {% endif %}
+        </td>
       </tr>
       {% endfor %}
     </tbody>

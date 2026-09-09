@@ -113,6 +113,27 @@ Disable listeners with:
 AI_QUOTA_MONITOR_ENABLE_APP_SERVER_NOTIFICATIONS=false
 ```
 
+## Logging
+
+`ai_quota_monitor.logging_config.configure_logging` attaches a rotating file handler to the `ai_quota_monitor` logger during app creation.
+
+Default path:
+
+```text
+data/logs/ai-quota-monitor.log
+```
+
+Settings:
+
+| Setting | Purpose |
+| --- | --- |
+| `AI_QUOTA_MONITOR_LOG_LEVEL` | Log level |
+| `AI_QUOTA_MONITOR_LOG_FILE` | Explicit log file path |
+| `AI_QUOTA_MONITOR_LOG_MAX_BYTES` | Rotation size |
+| `AI_QUOTA_MONITOR_LOG_BACKUP_COUNT` | Number of rotated files |
+
+Route handlers and background services log exceptions before returning user-facing redirects or event rows.
+
 ## Scheduler
 
 On startup, APScheduler reads account schedules and creates:
@@ -135,6 +156,7 @@ The frontend uses server-rendered partials:
 
 | Partial | Refresh |
 | --- | --- |
+| `/partials/accounts` | Dashboard account cards |
 | `/partials/accounts/{account_id}/usage` | Account usage panel |
 | `/partials/scheduler` | Scheduled jobs |
 | `/partials/events/recent` | Recent events |

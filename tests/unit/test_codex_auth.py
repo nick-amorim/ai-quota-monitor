@@ -95,18 +95,31 @@ def wait_for_status(session_factory, account_id: int, status: str) -> Account:
     raise AssertionError(f"account {account_id} did not reach {status}")
 
 
+def wait_for_callback(callbacks: list[str]) -> None:
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        if callbacks:
+            return
+        time.sleep(0.01)
+    raise AssertionError("auth status callback did not run")
+
+
 def test_start_device_login_returns_code_and_updates_account(tmp_path):
     backend = FakeBackend()
     engine, session_factory, manager = make_manager(tmp_path, backend)
+    callbacks = []
+    manager.set_status_change_callback(lambda: callbacks.append("changed"))
 
     snapshot = manager.start_device_login(1)
     account = wait_for_status(session_factory, 1, "connected")
+    wait_for_callback(callbacks)
 
     assert snapshot.verification_url == "https://example.test/device"
     assert snapshot.user_code == "ABCD-EFGH"
     assert account.account_display == "user@example.test"
     assert account.plan_type == "plus"
     assert backend.attempt.closed is True
+    assert callbacks == ["changed"]
     engine.dispose()
 
 

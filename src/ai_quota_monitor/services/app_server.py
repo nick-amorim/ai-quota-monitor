@@ -117,7 +117,11 @@ class CodexAppServerClient:
                 raise TimeoutError(f"Timed out waiting for {method}") from exc
 
             if item is None:
-                raise CodexAppServerError("Codex app-server exited")
+                detail = self._stderr_tail()
+                message = "Codex app-server exited"
+                if detail:
+                    message = f"{message}: {detail}"
+                raise CodexAppServerError(message)
             if isinstance(item, BaseException):
                 raise CodexAppServerError(str(item)) from item
             if item.get("id") != request_id:
@@ -196,3 +200,13 @@ class CodexAppServerClient:
             )
         )
         return True
+
+    def _stderr_tail(self) -> str:
+        process = self._process
+        if process is None or process.stderr is None or process.poll() is None:
+            return ""
+        try:
+            value = process.stderr.read()
+        except Exception:
+            return ""
+        return " ".join(value.split())[-1000:]

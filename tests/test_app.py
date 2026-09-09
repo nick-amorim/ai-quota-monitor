@@ -175,9 +175,9 @@ def test_dashboard_shell_renders(tmp_path):
     assert "Accounts and schedules" in response.text
     assert "Account A" in response.text
     assert "Account B" in response.text
-    assert "Start device login" in response.text
-    assert "Check status" in response.text
-    assert "Run anchor" in response.text
+    assert "Login" in response.text
+    assert "Check" in response.text
+    assert "Anchor" in response.text
     assert "Global anchor prompt" in response.text
     assert "Scheduled anchors" in response.text
     assert "Timeline" in response.text
@@ -186,6 +186,7 @@ def test_dashboard_shell_renders(tmp_path):
     assert 'data-theme-toggle' in response.text
     assert 'data-drawer-open="settings-drawer"' in response.text
     assert 'id="settings-drawer"' in response.text
+    assert 'hx-get="/partials/accounts"' in response.text
     assert 'href="/monitor"' in response.text
     assert 'href="/history"' in response.text
     assert 'hx-get="/partials/scheduler"' in response.text
@@ -208,6 +209,7 @@ def test_database_file_is_created(tmp_path):
         pass
 
     assert database_path.exists()
+    assert (tmp_path / "logs" / "ai-quota-monitor.log").exists()
 
 
 def test_app_factory_does_not_reuse_dashboard_routes(tmp_path):
@@ -275,6 +277,7 @@ def test_auth_status_route_updates_account_metadata(tmp_path):
 
     assert response.status_code == 303
     assert "user@example.test" in dashboard.text
+    assert "<h3>user@example.test</h3>" in dashboard.text
     assert "plus" in dashboard.text
 
 
@@ -328,6 +331,7 @@ def test_manual_anchor_route_records_history(tmp_path):
     assert "Recent anchor runs" in dashboard.text
     assert "Completed" in dashboard.text
     assert "OK" in dashboard.text
+    assert "72.0%" in dashboard.text
 
 
 def test_usage_refresh_route_records_quota_snapshot(tmp_path):
@@ -342,9 +346,9 @@ def test_usage_refresh_route_records_quota_snapshot(tmp_path):
 
     assert response.status_code == 303
     assert "Quota telemetry" in dashboard.text
-    assert "Observed reset" in dashboard.text
-    assert "Expected reset" in dashboard.text
-    assert "Configured:" in dashboard.text
+    assert "Observed" in dashboard.text
+    assert "Expected" in dashboard.text
+    assert "Configured" in dashboard.text
     assert "Weekly drift" in dashboard.text
     assert "72" in dashboard.text
     assert "43" in dashboard.text
@@ -368,6 +372,7 @@ def test_history_route_filters_events(tmp_path):
                 category="live-updates",
                 message="Listener start failed",
                 account_id=2,
+                payload={"error": "codex app-server exited"},
             )
 
         response = client.get("/history?account_id=2&level=warning")
@@ -375,6 +380,7 @@ def test_history_route_filters_events(tmp_path):
     assert response.status_code == 200
     assert "Event history" in response.text
     assert "Listener start failed" in response.text
+    assert "codex app-server exited" in response.text
     assert "Scheduler reloaded" not in response.text
     assert "All levels" in response.text
 
@@ -385,12 +391,16 @@ def test_partial_routes_render_refreshable_sections(tmp_path):
     with TestClient(app) as client:
         client.post("/accounts/1/usage/refresh", follow_redirects=False)
         usage = client.get("/partials/accounts/1/usage")
+        accounts = client.get("/partials/accounts")
         scheduler = client.get("/partials/scheduler")
         events = client.get("/partials/events/recent")
 
     assert usage.status_code == 200
     assert "Quota telemetry" in usage.text
     assert "72" in usage.text
+    assert accounts.status_code == 200
+    assert 'id="account-grid"' in accounts.text
+    assert "Last anchor" in accounts.text
     assert scheduler.status_code == 200
     assert "Scheduled anchors" in scheduler.text
     assert events.status_code == 200

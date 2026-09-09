@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import UTC, datetime, time
 from urllib.parse import parse_qs
 
@@ -18,6 +19,8 @@ from ai_quota_monitor.services.accounts import (
 from ai_quota_monitor.services.anchors import get_app_setting, update_app_setting
 from ai_quota_monitor.services.events import EventFilters, list_events, recent_events
 from ai_quota_monitor.services.monitor import MonitorView, build_monitor_view
+
+logger = logging.getLogger(__name__)
 
 
 def register_routes(templates: Jinja2Templates) -> APIRouter:
@@ -37,6 +40,7 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
         scheduled_jobs = request.app.state.quota_scheduler.next_runs()
         monitor_view = _monitor_view(request, accounts, usage_by_account, scheduled_jobs)
         system_info = request.app.state.system_service.info()
+        anchor_runs = request.app.state.anchor_service.recent_runs(limit=8)
 
         return templates.TemplateResponse(
             request,
@@ -49,7 +53,8 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 "weekdays": WEEKDAYS,
                 "login_attempts": request.app.state.auth_manager.login_snapshots(),
                 "anchor_prompt": anchor_prompt,
-                "anchor_runs": request.app.state.anchor_service.recent_runs(limit=8),
+                "anchor_runs": anchor_runs,
+                "latest_anchor_by_account": _latest_anchor_by_account(anchor_runs),
                 "usage_by_account": usage_by_account,
                 "account_views": monitor_view.account_map,
                 "timeline": monitor_view.timeline,
@@ -57,6 +62,28 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 "scheduled_jobs": scheduled_jobs,
                 "system_info": system_info,
                 "events": recent_events(session_factory, limit=8),
+            },
+        )
+
+    @router.get("/partials/accounts", response_class=HTMLResponse)
+    async def accounts_partial(request: Request) -> HTMLResponse:
+        session_factory = request.app.state.session_factory
+        with session_factory() as session:
+            accounts = list_accounts(session)
+        usage_by_account = request.app.state.telemetry_service.latest_snapshots_by_account()
+        scheduled_jobs = request.app.state.quota_scheduler.next_runs()
+        monitor_view = _monitor_view(request, accounts, usage_by_account, scheduled_jobs)
+        anchor_runs = request.app.state.anchor_service.recent_runs(limit=8)
+
+        return templates.TemplateResponse(
+            request,
+            "_account_grid.html",
+            {
+                "accounts": accounts,
+                "login_attempts": request.app.state.auth_manager.login_snapshots(),
+                "usage_by_account": usage_by_account,
+                "account_views": monitor_view.account_map,
+                "latest_anchor_by_account": _latest_anchor_by_account(anchor_runs),
             },
         )
 
@@ -247,6 +274,7 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
         except KeyError:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from None
         except Exception:
+            logger.exception("Failed to start device login for account %s", account_id)
             pass
 
         return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
@@ -263,6 +291,7 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
         except KeyError:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from None
         except Exception:
+            logger.exception("Failed to refresh auth status for account %s", account_id)
             pass
 
         request.app.state.rate_limit_listener.reload()
@@ -275,6 +304,7 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
         except KeyError:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from None
         except Exception:
+            logger.exception("Failed to log out account %s", account_id)
             pass
 
         request.app.state.rate_limit_listener.reload()
@@ -290,7 +320,16 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
         except KeyError:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from None
         except Exception:
+            logger.exception("Manual anchor failed for account %s", account_id)
             pass
+        else:
+            try:
+                await asyncio.to_thread(
+                    request.app.state.telemetry_service.refresh_account_usage,
+                    account_id,
+                )
+            except Exception:
+                logger.exception("Post-anchor usage refresh failed for account %s", account_id)
 
         return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -399,3 +438,11 @@ def _monitor_view(
         settings=request.app.state.settings,
         now=datetime.now(UTC),
     )
+
+
+def _latest_anchor_by_account(anchor_runs) -> dict[int, object]:
+    latest: dict[int, object] = {}
+    for run in anchor_runs:
+        if run.account_id not in latest:
+            latest[run.account_id] = run
+    return latest

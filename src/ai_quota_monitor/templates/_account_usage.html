@@ -21,7 +21,7 @@
     </form>
   </div>
 
-  {% if account_view and account_view.has_snapshot %}
+  {% if account_view %}
   <div class="usage-grid">
     {% for window in account_view.windows %}
     <div class="usage-window usage-window--{{ window.status_class }}">
@@ -33,9 +33,11 @@
       <div class="usage-meter" aria-hidden="true">
         <span style="width: {{ window.used_percent_value or 0 }}%"></span>
       </div>
-      <small>Configured: {{ window.configured_label }}</small>
-      <small>Expected reset: {{ window.expected_label }}</small>
-      <small>Observed reset: {{ window.observed_label }}</small>
+      <div class="usage-window__facts">
+        <span title="{{ window.configured_label }}">Configured {{ window.configured_label }}</span>
+        <span title="{{ window.expected_label }}">Expected {{ window.expected_label }}</span>
+        <span title="{{ window.observed_label }}">{{ window.reset_source_label }} {{ window.reset_time_label }}</span>
+      </div>
       {% if window.drift_label %}
       <small>{{ window.drift_label }}</small>
       {% endif %}
@@ -43,7 +45,7 @@
     {% endfor %}
   </div>
   <p class="usage-meta">
-    Last telemetry {{ account_view.captured_label }}
+    {{ "Last telemetry " ~ account_view.captured_label if account_view.has_snapshot else "No telemetry yet" }}
     <span class="usage-status usage-status--{{ account_view.snapshot_status_class }}">
       {{ account_view.snapshot_status_label }}
     </span>

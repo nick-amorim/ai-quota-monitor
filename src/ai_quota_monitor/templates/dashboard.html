@@ -17,8 +17,7 @@
       <p class="eyebrow">Operational dashboard</p>
       <h2 id="dashboard-title">Accounts and schedules</h2>
       <p>
-        Account setup, authentication, quota telemetry, schedules, and anchor execution are available.
-        Scheduled anchors reload as soon as account schedules change.
+        Usage, auth, reset timing, and anchor feedback for both Codex accounts.
       </p>
     </div>
     <div class="hero-actions">
@@ -48,142 +47,62 @@
     </div>
   </dl>
 
-  {% include "_timeline.html" %}
+  {% include "_account_grid.html" %}
 
-  <div class="account-grid">
-    {% for account in accounts %}
-    <article class="account-panel">
-      <header class="account-panel__header">
-        <div>
-          <p class="eyebrow">{{ account.slug }}</p>
-          <h3>{{ account.name }}</h3>
-        </div>
-        <div class="state-stack">
-          <span class="account-state">{{ "Enabled" if account.enabled else "Paused" }}</span>
-          <span class="auth-state auth-state--{{ account.auth_status }}">
-            {{ account.auth_status.replace("_", " ") | title }}
-          </span>
-        </div>
-      </header>
+  <div class="dashboard-secondary">
+    {% include "_timeline.html" %}
+    {% include "_scheduled_jobs.html" %}
 
-      {% set login = login_attempts.get(account.id) %}
-      {% if login %}
-      <section class="login-panel" aria-label="Device login for {{ account.name }}">
-        <div>
-          <span>Device code</span>
-          <strong>{{ login.user_code }}</strong>
-        </div>
-        <a href="{{ login.verification_url }}" target="_blank" rel="noreferrer">
-          Open verification
-        </a>
-      </section>
-      {% endif %}
-
-      {% if account.account_display %}
-      <p class="account-meta">
-        Signed in as {{ account.account_display }}
-        {% if account.plan_type %}({{ account.plan_type }}){% endif %}
-      </p>
-      {% endif %}
-
-      {% include "_account_usage.html" %}
-
-      <dl class="schedule-summary">
-        <div>
-          <dt>Daily</dt>
-          <dd>{{ account.schedule.daily_anchor_time.strftime('%H:%M') }}</dd>
-        </div>
-        <div>
-          <dt>Weekly</dt>
-          <dd>{{ account.schedule.weekly_target_day | title }} {{ account.schedule.weekly_target_time.strftime('%H:%M') }}</dd>
-        </div>
-      </dl>
-
-      <div class="auth-actions" aria-label="Authentication actions for {{ account.name }}">
-        <form method="post" action="/accounts/{{ account.id }}/auth/device-login">
-          <button type="submit">Start device login</button>
-        </form>
-        <form method="post" action="/accounts/{{ account.id }}/auth/status">
-          <button type="submit" class="secondary-button">Check status</button>
-        </form>
-        {% if login %}
-        <form method="post" action="/accounts/{{ account.id }}/auth/cancel">
-          <button type="submit" class="secondary-button">Cancel login</button>
-        </form>
-        {% endif %}
-        <form method="post" action="/accounts/{{ account.id }}/auth/logout">
-          <button type="submit" class="danger-button">Logout</button>
-        </form>
+    <section class="history-panel" aria-labelledby="anchor-history-title">
+      <div>
+        <p class="eyebrow">History</p>
+        <h3 id="anchor-history-title">Recent anchor runs</h3>
       </div>
 
-      <div class="anchor-actions" aria-label="Anchor actions for {{ account.name }}">
-        <form method="post" action="/accounts/{{ account.id }}/anchors/run">
-          <button
-            type="submit"
-            {% if account.auth_status != "connected" %}disabled{% endif %}
-          >
-            Run anchor
-          </button>
-        </form>
-        <button type="button" class="secondary-button" data-drawer-open="settings-drawer">
-          Edit settings
-        </button>
+      {% if anchor_runs %}
+      <div class="history-table-wrap">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th scope="col">Account</th>
+              <th scope="col">Status</th>
+              <th scope="col">Started</th>
+              <th scope="col">Duration</th>
+              <th scope="col">Result</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for run in anchor_runs %}
+            <tr>
+              <td>{{ (run.account.account_display or run.account.name) if run.account else "Unknown" }}</td>
+              <td>
+                <span class="anchor-status anchor-status--{{ run.status }}">
+                  {{ run.status | title }}
+                </span>
+              </td>
+              <td>{{ run.started_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+              <td>{{ (run.duration_ms ~ " ms") if run.duration_ms is not none else "-" }}</td>
+              <td>
+                {% if run.error_message %}
+                  {{ run.error_message }}
+                {% elif run.final_response %}
+                  {{ run.final_response }}
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
       </div>
-    </article>
-    {% endfor %}
+      {% else %}
+      <p class="empty-state">No anchor runs yet.</p>
+      {% endif %}
+    </section>
+
+    {% include "_recent_events.html" %}
   </div>
-
-  {% include "_scheduled_jobs.html" %}
-
-  <section class="history-panel" aria-labelledby="anchor-history-title">
-    <div>
-      <p class="eyebrow">History</p>
-      <h3 id="anchor-history-title">Recent anchor runs</h3>
-    </div>
-
-    {% if anchor_runs %}
-    <div class="history-table-wrap">
-      <table class="history-table">
-        <thead>
-          <tr>
-            <th scope="col">Account</th>
-            <th scope="col">Status</th>
-            <th scope="col">Started</th>
-            <th scope="col">Duration</th>
-            <th scope="col">Result</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for run in anchor_runs %}
-          <tr>
-            <td>{{ run.account.name if run.account else "Unknown" }}</td>
-            <td>
-              <span class="anchor-status anchor-status--{{ run.status }}">
-                {{ run.status | title }}
-              </span>
-            </td>
-            <td>{{ run.started_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
-            <td>{{ (run.duration_ms ~ " ms") if run.duration_ms is not none else "-" }}</td>
-            <td>
-              {% if run.error_message %}
-                {{ run.error_message }}
-              {% elif run.final_response %}
-                {{ run.final_response }}
-              {% else %}
-                -
-              {% endif %}
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% else %}
-    <p class="empty-state">No anchor runs yet.</p>
-    {% endif %}
-  </section>
-
-  {% include "_recent_events.html" %}
 
   <div id="settings-drawer" class="drawer" hidden role="dialog" aria-modal="true" aria-labelledby="settings-drawer-title">
     <div class="drawer-backdrop" data-drawer-close="settings-drawer"></div>

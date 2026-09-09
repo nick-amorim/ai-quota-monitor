@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import logging
 from collections.abc import Callable
 
 from sqlalchemy import select
@@ -16,6 +17,7 @@ from ai_quota_monitor.services.events import record_event
 from ai_quota_monitor.services.telemetry import TelemetryService
 
 AppServerClientFactory = Callable[..., CodexAppServerClient]
+logger = logging.getLogger(__name__)
 
 
 class RateLimitUpdateListener:
@@ -87,6 +89,11 @@ class RateLimitUpdateListener:
             client.start()
             client.initialize()
         except Exception as exc:
+            logger.warning(
+                "Rate-limit notification listener failed to start for account %s",
+                account.id,
+                exc_info=exc,
+            )
             self._record_start_failure(account.id, exc, client)
             return
 
@@ -146,6 +153,11 @@ class RateLimitUpdateListener:
                 source="codex-app-server-notification",
             )
         except Exception as exc:
+            logger.warning(
+                "Rate-limit notification ingest failed for account %s",
+                account_id,
+                exc_info=exc,
+            )
             self._record_event(
                 "warning",
                 "live-updates",

@@ -9,6 +9,15 @@
     return Number(match[1]) * 1000;
   }
 
+  function selectWithRoot(root, selector) {
+    const elements = [];
+    if (root.matches && root.matches(selector)) {
+      elements.push(root);
+    }
+    root.querySelectorAll(selector).forEach((element) => elements.push(element));
+    return elements;
+  }
+
   async function refresh(element) {
     if (!element.isConnected) {
       return;
@@ -39,19 +48,21 @@
           replacement.dataset.refreshState = "idle";
           element.replaceWith(replacement);
           initialize(replacement);
+          initializeDrawers(replacement);
         }
         return;
       }
       element.innerHTML = html;
       element.dataset.refreshState = "idle";
       initialize(element);
+      initializeDrawers(element);
     } catch {
       element.dataset.refreshState = "error";
     }
   }
 
   function initialize(root) {
-    root.querySelectorAll("[hx-get]").forEach((element) => {
+    selectWithRoot(root, "[hx-get]").forEach((element) => {
       if (element.dataset.hxRefreshReady === "true") {
         return;
       }
@@ -115,7 +126,7 @@
     }
     drawer.hidden = false;
     document.body.classList.add("drawer-open");
-    const closeButton = drawer.querySelector("[data-drawer-close]");
+    const closeButton = drawer.querySelector("button[data-drawer-close]");
     if (closeButton) {
       closeButton.focus();
     }
@@ -131,7 +142,7 @@
   }
 
   function initializeDrawers(root) {
-    root.querySelectorAll("[data-drawer-open]").forEach((button) => {
+    selectWithRoot(root, "[data-drawer-open]").forEach((button) => {
       if (button.dataset.drawerReady === "true") {
         return;
       }
@@ -139,7 +150,7 @@
       button.addEventListener("click", () => openDrawer(button.dataset.drawerOpen));
     });
 
-    root.querySelectorAll("[data-drawer-close]").forEach((button) => {
+    selectWithRoot(root, "[data-drawer-close]").forEach((button) => {
       if (button.dataset.drawerCloseReady === "true") {
         return;
       }

@@ -115,3 +115,21 @@ http://127.0.0.1:8080/history
 ```
 
 History can be filtered by account, severity level, and category prefix. It includes scheduler events, telemetry listener events, smart-anchor decisions, update events, and anchor failures.
+
+Events with structured payloads can be expanded in the table to inspect stored error details.
+
+## Logs
+
+The application writes rotating logs to:
+
+```text
+data/logs/ai-quota-monitor.log
+```
+
+Native/Proxmox deployments normally place this under:
+
+```text
+/var/lib/ai-quota-monitor/logs/ai-quota-monitor.log
+```
+
+Override with `AI_QUOTA_MONITOR_LOG_FILE` when needed. These logs include route and background-service exceptions that are also summarized in the event history.

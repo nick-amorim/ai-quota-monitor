@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./data/ai-quota-monitor.sqlite3"
     data_dir: Path = Field(default_factory=lambda: Path("data"))
     log_level: str = "INFO"
+    log_file: Path | None = None
+    log_max_bytes: int = 1_000_000
+    log_backup_count: int = 3
 
     usage_poll_interval_minutes: int = 5
     enable_scheduler: bool = True
