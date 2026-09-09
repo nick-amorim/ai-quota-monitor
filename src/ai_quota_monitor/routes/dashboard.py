@@ -27,6 +27,11 @@ from ai_quota_monitor.services.monitor import (
 
 logger = logging.getLogger(__name__)
 
+DASHBOARD_REFRESH_MIN_SECONDS = 5
+DASHBOARD_REFRESH_MAX_SECONDS = 300
+USAGE_POLL_MIN_MINUTES = 1
+USAGE_POLL_MAX_MINUTES = 240
+
 
 def register_routes(templates: Jinja2Templates) -> APIRouter:
     router = APIRouter()
@@ -36,11 +41,7 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
         session_factory = request.app.state.session_factory
         with session_factory() as session:
             accounts = list_accounts(session)
-            anchor_prompt = get_app_setting(
-                session,
-                "anchor_prompt",
-                request.app.state.settings.anchor_prompt,
-            )
+            app_settings = _runtime_app_settings(request, session)
         usage_by_account = request.app.state.telemetry_service.latest_snapshots_by_account()
         telemetry_errors_by_account = (
             request.app.state.telemetry_service.latest_refresh_errors_by_account()
@@ -66,7 +67,11 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 "accounts": accounts,
                 "weekdays": WEEKDAYS,
                 "login_attempts": request.app.state.auth_manager.login_snapshots(),
-                "anchor_prompt": anchor_prompt,
+                "anchor_prompt": app_settings["anchor_prompt"],
+                "app_settings": app_settings,
+                "dashboard_refresh_interval_seconds": app_settings[
+                    "dashboard_refresh_interval_seconds"
+                ],
                 "anchor_runs": anchor_runs,
                 "latest_anchor_by_account": _latest_anchor_by_account(anchor_runs),
                 "usage_by_account": usage_by_account,
@@ -87,6 +92,7 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
         session_factory = request.app.state.session_factory
         with session_factory() as session:
             accounts = list_accounts(session)
+            app_settings = _runtime_app_settings(request, session)
         usage_by_account = request.app.state.telemetry_service.latest_snapshots_by_account()
         telemetry_errors_by_account = (
             request.app.state.telemetry_service.latest_refresh_errors_by_account()
@@ -111,6 +117,9 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 "account_views": monitor_view.account_map,
                 "latest_anchor_by_account": _latest_anchor_by_account(anchor_runs),
                 "account_labels_by_id": _account_labels_by_id(accounts),
+                "dashboard_refresh_interval_seconds": app_settings[
+                    "dashboard_refresh_interval_seconds"
+                ],
                 **_template_helpers(request),
             },
         )
@@ -157,6 +166,7 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
     @router.get("/monitor", response_class=HTMLResponse)
     async def monitor(request: Request) -> HTMLResponse:
         monitor_view = _load_monitor_view(request)
+        app_settings = _load_runtime_app_settings(request)
         return templates.TemplateResponse(
             request,
             "monitor.html",
@@ -167,12 +177,16 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 "monitor_view": monitor_view,
                 "refresh_path": "/partials/monitor",
                 "account_slug": None,
+                "dashboard_refresh_interval_seconds": app_settings[
+                    "dashboard_refresh_interval_seconds"
+                ],
             },
         )
 
     @router.get("/monitor/{account_slug}", response_class=HTMLResponse)
     async def account_monitor(account_slug: str, request: Request) -> HTMLResponse:
         monitor_view = _load_monitor_view(request, account_slug=account_slug)
+        app_settings = _load_runtime_app_settings(request)
         return templates.TemplateResponse(
             request,
             "monitor.html",
@@ -183,30 +197,41 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 "monitor_view": monitor_view,
                 "refresh_path": f"/partials/monitor/{account_slug}",
                 "account_slug": account_slug,
+                "dashboard_refresh_interval_seconds": app_settings[
+                    "dashboard_refresh_interval_seconds"
+                ],
             },
         )
 
     @router.get("/partials/monitor", response_class=HTMLResponse)
     async def monitor_partial(request: Request) -> HTMLResponse:
         monitor_view = _load_monitor_view(request)
+        app_settings = _load_runtime_app_settings(request)
         return templates.TemplateResponse(
             request,
             "_monitor_content.html",
             {
                 "monitor_view": monitor_view,
                 "refresh_path": "/partials/monitor",
+                "dashboard_refresh_interval_seconds": app_settings[
+                    "dashboard_refresh_interval_seconds"
+                ],
             },
         )
 
     @router.get("/partials/monitor/{account_slug}", response_class=HTMLResponse)
     async def account_monitor_partial(account_slug: str, request: Request) -> HTMLResponse:
         monitor_view = _load_monitor_view(request, account_slug=account_slug)
+        app_settings = _load_runtime_app_settings(request)
         return templates.TemplateResponse(
             request,
             "_monitor_content.html",
             {
                 "monitor_view": monitor_view,
                 "refresh_path": f"/partials/monitor/{account_slug}",
+                "dashboard_refresh_interval_seconds": app_settings[
+                    "dashboard_refresh_interval_seconds"
+                ],
             },
         )
 
@@ -217,6 +242,7 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
             account = get_account(session, account_id)
             if account is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+            app_settings = _runtime_app_settings(request, session)
         usage_by_account = request.app.state.telemetry_service.latest_snapshots_by_account()
         telemetry_errors_by_account = (
             request.app.state.telemetry_service.latest_refresh_errors_by_account()
@@ -236,6 +262,9 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 "account": account,
                 "usage_by_account": usage_by_account,
                 "account_views": monitor_view.account_map,
+                "dashboard_refresh_interval_seconds": app_settings[
+                    "dashboard_refresh_interval_seconds"
+                ],
                 **_template_helpers(request),
             },
         )
@@ -245,12 +274,16 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
         session_factory = request.app.state.session_factory
         with session_factory() as session:
             accounts = list_accounts(session)
+            app_settings = _runtime_app_settings(request, session)
         return templates.TemplateResponse(
             request,
             "_scheduled_jobs.html",
             {
                 "scheduled_jobs": request.app.state.quota_scheduler.next_runs(),
                 "account_labels_by_id": _account_labels_by_id(accounts),
+                "dashboard_refresh_interval_seconds": app_settings[
+                    "dashboard_refresh_interval_seconds"
+                ],
                 **_template_helpers(request),
             },
         )
@@ -258,11 +291,16 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
     @router.get("/partials/events/recent", response_class=HTMLResponse)
     async def recent_events_partial(request: Request) -> HTMLResponse:
         session_factory = request.app.state.session_factory
+        with session_factory() as session:
+            app_settings = _runtime_app_settings(request, session)
         return templates.TemplateResponse(
             request,
             "_recent_events.html",
             {
                 "events": recent_events(session_factory, limit=8),
+                "dashboard_refresh_interval_seconds": app_settings[
+                    "dashboard_refresh_interval_seconds"
+                ],
                 **_template_helpers(request),
             },
         )
@@ -276,6 +314,45 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
         with session_factory() as session:
             update_app_setting(session, "anchor_prompt", prompt)
 
+        return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+
+    @router.post("/settings/global")
+    async def save_global_settings(request: Request) -> RedirectResponse:
+        form = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
+        prompt = _required(form, "anchor_prompt")
+        dashboard_refresh_interval_seconds = _parse_int_range(
+            _required(form, "dashboard_refresh_interval_seconds"),
+            "dashboard_refresh_interval_seconds",
+            minimum=DASHBOARD_REFRESH_MIN_SECONDS,
+            maximum=DASHBOARD_REFRESH_MAX_SECONDS,
+        )
+        usage_poll_interval_minutes = _parse_int_range(
+            _required(form, "usage_poll_interval_minutes"),
+            "usage_poll_interval_minutes",
+            minimum=USAGE_POLL_MIN_MINUTES,
+            maximum=USAGE_POLL_MAX_MINUTES,
+        )
+        session_factory = request.app.state.session_factory
+
+        with session_factory() as session:
+            update_app_setting(session, "anchor_prompt", prompt)
+            update_app_setting(
+                session,
+                "dashboard_refresh_interval_seconds",
+                str(dashboard_refresh_interval_seconds),
+            )
+            update_app_setting(
+                session,
+                "usage_poll_interval_minutes",
+                str(usage_poll_interval_minutes),
+            )
+
+        request.app.state.settings.anchor_prompt = prompt
+        request.app.state.settings.dashboard_refresh_interval_seconds = (
+            dashboard_refresh_interval_seconds
+        )
+        request.app.state.settings.usage_poll_interval_minutes = usage_poll_interval_minutes
+        request.app.state.quota_scheduler.reload()
         return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
 
     @router.post("/accounts/{account_id}/schedule")
@@ -418,6 +495,29 @@ def _parse_time(value: str) -> time:
         ) from exc
 
 
+def _parse_int_range(
+    value: str,
+    label: str,
+    *,
+    minimum: int,
+    maximum: int,
+) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{label} must be a number",
+        ) from exc
+
+    if parsed < minimum or parsed > maximum:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{label} must be between {minimum} and {maximum}",
+        )
+    return parsed
+
+
 def _optional_int(value: str | None) -> int | None:
     if value is None or value.strip() == "":
         return None
@@ -490,6 +590,53 @@ def _monitor_view(
         settings=request.app.state.settings,
         now=datetime.now(UTC),
     )
+
+
+def _load_runtime_app_settings(request: Request) -> dict[str, str | int]:
+    with request.app.state.session_factory() as session:
+        return _runtime_app_settings(request, session)
+
+
+def _runtime_app_settings(request: Request, session) -> dict[str, str | int]:
+    settings = request.app.state.settings
+    return {
+        "anchor_prompt": get_app_setting(
+            session,
+            "anchor_prompt",
+            settings.anchor_prompt,
+        )
+        or settings.anchor_prompt,
+        "dashboard_refresh_interval_seconds": _int_app_setting(
+            session,
+            "dashboard_refresh_interval_seconds",
+            settings.dashboard_refresh_interval_seconds,
+            minimum=DASHBOARD_REFRESH_MIN_SECONDS,
+            maximum=DASHBOARD_REFRESH_MAX_SECONDS,
+        ),
+        "usage_poll_interval_minutes": _int_app_setting(
+            session,
+            "usage_poll_interval_minutes",
+            settings.usage_poll_interval_minutes,
+            minimum=USAGE_POLL_MIN_MINUTES,
+            maximum=USAGE_POLL_MAX_MINUTES,
+        ),
+    }
+
+
+def _int_app_setting(
+    session,
+    key: str,
+    default: int,
+    *,
+    minimum: int,
+    maximum: int,
+) -> int:
+    value = get_app_setting(session, key, str(default)) or str(default)
+    try:
+        parsed = int(value)
+    except ValueError:
+        return default
+    return min(max(parsed, minimum), maximum)
 
 
 def _latest_anchor_by_account(anchor_runs) -> dict[int, object]:

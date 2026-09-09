@@ -2,7 +2,7 @@
   id="monitor-content"
   class="monitor-content"
   hx-get="{{ refresh_path }}"
-  hx-trigger="every 15s"
+  hx-trigger="every {{ dashboard_refresh_interval_seconds }}s"
   hx-swap="outerHTML"
 >
   <header class="monitor-toolbar">

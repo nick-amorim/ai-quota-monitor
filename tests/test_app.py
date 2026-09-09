@@ -6,7 +6,7 @@ from fastapi.templating import Jinja2Templates
 from ai_quota_monitor.config import Settings
 from ai_quota_monitor.database import create_database_engine, create_session_factory
 from ai_quota_monitor.main import create_app
-from ai_quota_monitor.models import Account
+from ai_quota_monitor.models import Account, AppSetting
 from ai_quota_monitor.routes.dashboard import register_routes
 from ai_quota_monitor.services.anchors import AnchorTurnResult
 from ai_quota_monitor.services.codex_auth import CodexAccountInfo
@@ -185,9 +185,12 @@ def test_dashboard_shell_renders(tmp_path):
     assert "Account A" not in response.text
     assert "Account B" not in response.text
     assert "Login" in response.text
-    assert "Check" in response.text
+    assert "Refresh auth" in response.text
     assert "Anchor" in response.text
-    assert "Global anchor prompt" in response.text
+    assert "Global settings" in response.text
+    assert "Refresh behavior" in response.text
+    assert "Dashboard refresh seconds" in response.text
+    assert "Usage polling minutes" in response.text
     assert "Scheduled anchors" in response.text
     assert "Timeline" in response.text
     assert "Next wake" in response.text
@@ -195,15 +198,17 @@ def test_dashboard_shell_renders(tmp_path):
     assert "Deployment and updates" in response.text
     assert "Check update plan" in response.text
     assert 'data-theme-toggle' in response.text
-    assert 'data-drawer-open="settings-drawer"' in response.text
-    assert 'id="settings-drawer"' in response.text
+    assert 'data-drawer-open="global-settings-drawer"' in response.text
+    assert 'id="global-settings-drawer"' in response.text
+    assert 'data-drawer-open="account-settings-drawer-1"' in response.text
+    assert 'id="account-settings-drawer-1"' in response.text
     assert 'hx-get="/partials/accounts"' in response.text
+    assert 'hx-trigger="every 10s"' in response.text
     assert 'href="/monitor"' in response.text
     assert 'href="/history"' in response.text
     assert 'hx-get="/partials/scheduler"' in response.text
     assert 'hx-get="/partials/events/recent"' in response.text
     assert "No anchor runs yet." in response.text
-    assert "Application" not in response.text
 
 
 def test_database_file_is_created(tmp_path):
@@ -319,6 +324,63 @@ def test_anchor_prompt_update_persists(tmp_path):
 
     assert response.status_code == 303
     assert "Reply with PONG only." in dashboard.text
+
+
+def test_global_settings_update_controls_refresh_intervals(tmp_path):
+    app = make_app(tmp_path)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/settings/global",
+            data={
+                "anchor_prompt": "Reply with STILL HERE.",
+                "dashboard_refresh_interval_seconds": "45",
+                "usage_poll_interval_minutes": "17",
+            },
+            follow_redirects=False,
+        )
+        dashboard = client.get("/")
+
+        with app.state.session_factory() as session:
+            dashboard_refresh = session.get(
+                AppSetting,
+                "dashboard_refresh_interval_seconds",
+            )
+            usage_poll = session.get(AppSetting, "usage_poll_interval_minutes")
+
+        usage_job = app.state.quota_scheduler._scheduler.get_job("telemetry:refresh-all")
+
+    assert response.status_code == 303
+    assert 'hx-trigger="every 45s"' in dashboard.text
+    assert 'value="45"' in dashboard.text
+    assert 'value="17"' in dashboard.text
+    assert "Reply with STILL HERE." in dashboard.text
+    assert dashboard_refresh is not None
+    assert dashboard_refresh.value == "45"
+    assert usage_poll is not None
+    assert usage_poll.value == "17"
+    assert usage_job is not None
+    assert usage_job.trigger.interval.total_seconds() == 1020
+
+
+def test_connected_account_shows_logout_instead_of_login(tmp_path):
+    settings = make_settings(tmp_path)
+    app = create_app(
+        settings,
+        auth_backend_factory=FakeAuthBackend,
+        anchor_backend_factory=FakeAnchorBackend,
+        telemetry_backend_factory=FakeTelemetryBackend,
+        system_service_factory=FakeSystemService,
+    )
+
+    with TestClient(app) as client:
+        mark_account_connected(settings, account_id=1)
+        mark_account_connected(settings, account_id=2)
+        response = client.get("/")
+
+    assert response.status_code == 200
+    assert "Login" not in response.text
+    assert "Logout" in response.text
 
 
 def test_manual_anchor_route_records_history(tmp_path):

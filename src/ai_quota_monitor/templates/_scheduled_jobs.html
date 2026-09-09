@@ -3,7 +3,7 @@
   class="ops-panel schedule-panel"
   aria-labelledby="scheduler-title"
   hx-get="/partials/scheduler"
-  hx-trigger="every 30s"
+  hx-trigger="every {{ dashboard_refresh_interval_seconds }}s"
   hx-swap="outerHTML"
 >
   <div class="section-heading">

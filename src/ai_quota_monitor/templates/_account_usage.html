@@ -5,7 +5,7 @@
   class="usage-panel"
   aria-label="Quota telemetry for {{ account_view.display_label if account_view else 'Account not logged in' }}"
   hx-get="/partials/accounts/{{ account.id }}/usage"
-  hx-trigger="every 30s"
+  hx-trigger="every {{ dashboard_refresh_interval_seconds }}s"
   hx-swap="outerHTML"
 >
   <div class="usage-panel__header">
@@ -16,7 +16,7 @@
         class="secondary-button"
         {% if account.auth_status != "connected" %}disabled{% endif %}
       >
-        Refresh usage
+        Refresh now
       </button>
     </form>
   </div>

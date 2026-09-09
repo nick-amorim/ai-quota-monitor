@@ -312,7 +312,7 @@ class QuotaScheduler:
         if self._telemetry_refresher is None:
             return
 
-        interval_minutes = max(1, self._settings.usage_poll_interval_minutes)
+        interval_minutes = self._usage_poll_interval_minutes()
         scheduler.add_job(
             self.run_usage_refresh_job,
             trigger=IntervalTrigger(
@@ -326,6 +326,17 @@ class QuotaScheduler:
             next_run_time=datetime.now(_timezone(self._settings.timezone)),
             replace_existing=True,
         )
+
+    def _usage_poll_interval_minutes(self) -> int:
+        with self._session_factory() as session:
+            return max(
+                1,
+                _int_setting_value(
+                    session,
+                    "usage_poll_interval_minutes",
+                    self._settings.usage_poll_interval_minutes,
+                ),
+            )
 
     def _record_apscheduler_event(self, event: JobExecutionEvent) -> None:
         if not event.job_id.startswith(SCHEDULER_JOB_PREFIX):

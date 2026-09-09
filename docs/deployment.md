@@ -18,6 +18,8 @@ Important settings:
 | `AI_QUOTA_MONITOR_LOG_FILE` | Rotating app log path, defaults under `data/logs` |
 | `AI_QUOTA_MONITOR_LOG_MAX_BYTES` | Maximum size before log rotation |
 | `AI_QUOTA_MONITOR_LOG_BACKUP_COUNT` | Number of rotated log files to keep |
+| `AI_QUOTA_MONITOR_DASHBOARD_REFRESH_INTERVAL_SECONDS` | Browser-only dashboard and monitor partial refresh interval |
+| `AI_QUOTA_MONITOR_USAGE_POLL_INTERVAL_MINUTES` | Background Codex quota telemetry polling interval |
 | `AI_QUOTA_MONITOR_ENABLE_SCHEDULER` | Enable background scheduled anchors |
 | `AI_QUOTA_MONITOR_ENABLE_APP_SERVER_NOTIFICATIONS` | Enable live quota update listeners |
 | `AI_QUOTA_MONITOR_ENABLE_WEB_UPDATES` | Allow real native/Proxmox web updates |

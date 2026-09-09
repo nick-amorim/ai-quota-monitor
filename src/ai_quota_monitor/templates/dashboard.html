@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block header_actions %}
-<button class="icon-btn icon-btn--primary" type="button" data-drawer-open="settings-drawer" aria-label="Open settings" title="Open settings">
+<button class="icon-btn icon-btn--primary" type="button" data-drawer-open="global-settings-drawer" aria-label="Open global settings" title="Open global settings">
   <svg class="icon" aria-hidden="true" viewBox="0 0 24 24">
     <circle cx="12" cy="12" r="3"></circle>
     <path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a7 7 0 0 0-1.7-1L14.5 3h-5l-.3 3.1a7 7 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.3 3.1h5l.3-3.1a7 7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.5c.1-.3.1-.7.1-1Z"></path>
@@ -136,28 +136,21 @@
             <path d="M8 18H5v3"></path>
             <path d="M16 6h3V3"></path>
           </svg>
-          Refresh usage
+          Refresh usage now
         </button>
       </form>
-      <button type="button" class="secondary-button" data-drawer-open="settings-drawer">
-        <svg class="icon" aria-hidden="true" viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="3"></circle>
-          <path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a7 7 0 0 0-1.7-1L14.5 3h-5l-.3 3.1a7 7 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.3 3.1h5l.3-3.1a7 7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.5c.1-.3.1-.7.1-1Z"></path>
-        </svg>
-        Schedules
-      </button>
     </div>
   </footer>
 
-  <div id="settings-drawer" class="drawer" hidden role="dialog" aria-modal="true" aria-labelledby="settings-drawer-title">
-    <div class="drawer-backdrop" data-drawer-close="settings-drawer"></div>
+  <div id="global-settings-drawer" class="drawer" hidden role="dialog" aria-modal="true" aria-labelledby="global-settings-drawer-title">
+    <div class="drawer-backdrop" data-drawer-close="global-settings-drawer"></div>
     <aside class="drawer-panel">
       <header class="drawer-head">
         <div>
-          <p class="eyebrow">Configuration</p>
-          <h3 id="settings-drawer-title">Settings</h3>
+          <p class="eyebrow">Application</p>
+          <h3 id="global-settings-drawer-title">Global settings</h3>
         </div>
-        <button type="button" class="icon-btn modal-close" data-drawer-close="settings-drawer" aria-label="Close settings" title="Close settings">
+        <button type="button" class="icon-btn modal-close" data-drawer-close="global-settings-drawer" aria-label="Close global settings" title="Close global settings">
           <svg class="icon" aria-hidden="true" viewBox="0 0 24 24">
             <path d="M18 6 6 18"></path>
             <path d="m6 6 12 12"></path>
@@ -219,21 +212,71 @@
           </div>
         </section>
 
-        <section class="settings-panel" aria-labelledby="anchor-settings-title">
+        <section class="settings-panel" aria-labelledby="global-runtime-title">
           <div>
-            <p class="eyebrow">Anchor execution</p>
-            <h3 id="anchor-settings-title">Global anchor prompt</h3>
+            <p class="eyebrow">Runtime</p>
+            <h3 id="global-runtime-title">Refresh behavior</h3>
           </div>
-          <form method="post" action="/settings/anchor" class="anchor-settings-form">
+          <form method="post" action="/settings/global" class="anchor-settings-form">
+            <div class="form-grid">
+              <label>
+                <span>Dashboard refresh seconds</span>
+                <input
+                  type="number"
+                  name="dashboard_refresh_interval_seconds"
+                  min="5"
+                  max="300"
+                  step="1"
+                  value="{{ app_settings.dashboard_refresh_interval_seconds }}"
+                  required
+                >
+                <small>Browser-only refresh for visible dashboard and monitor panels.</small>
+              </label>
+
+              <label>
+                <span>Usage polling minutes</span>
+                <input
+                  type="number"
+                  name="usage_poll_interval_minutes"
+                  min="1"
+                  max="240"
+                  step="1"
+                  value="{{ app_settings.usage_poll_interval_minutes }}"
+                  required
+                >
+                <small>Background Codex telemetry refresh for connected accounts.</small>
+              </label>
+            </div>
+
             <label>
-              <span>Prompt</span>
+              <span>Anchor prompt</span>
               <textarea name="anchor_prompt" rows="3" required>{{ anchor_prompt }}</textarea>
             </label>
-            <button type="submit">Save prompt</button>
+            <button type="submit">Save global settings</button>
           </form>
         </section>
+      </div>
+    </aside>
+  </div>
 
-        {% for account in accounts %}
+  {% for account in accounts %}
+  <div id="account-settings-drawer-{{ account.id }}" class="drawer" hidden role="dialog" aria-modal="true" aria-labelledby="account-settings-title-{{ account.id }}">
+    <div class="drawer-backdrop" data-drawer-close="account-settings-drawer-{{ account.id }}"></div>
+    <aside class="drawer-panel">
+      <header class="drawer-head">
+        <div>
+          <p class="eyebrow">Account schedule</p>
+          <h3 id="account-settings-title-{{ account.id }}">{{ account_label(account) }}</h3>
+        </div>
+        <button type="button" class="icon-btn modal-close" data-drawer-close="account-settings-drawer-{{ account.id }}" aria-label="Close account settings" title="Close account settings">
+          <svg class="icon" aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M18 6 6 18"></path>
+            <path d="m6 6 12 12"></path>
+          </svg>
+        </button>
+      </header>
+
+      <div class="drawer-body">
         <section class="settings-panel" aria-labelledby="schedule-settings-title-{{ account.id }}">
           <div>
             <p class="eyebrow">Schedule</p>
@@ -324,9 +367,9 @@
             <button type="submit">Save schedule</button>
           </form>
         </section>
-        {% endfor %}
       </div>
     </aside>
   </div>
+  {% endfor %}
 </section>
 {% endblock %}

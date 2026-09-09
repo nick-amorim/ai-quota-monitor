@@ -2,7 +2,7 @@
   id="account-grid"
   class="account-grid"
   hx-get="/partials/accounts"
-  hx-trigger="every 10s"
+  hx-trigger="every {{ dashboard_refresh_interval_seconds }}s"
   hx-swap="outerHTML"
 >
   {% for account in accounts %}
@@ -86,32 +86,37 @@
     </div>
 
     <div class="account-actions-row" aria-label="Actions for {{ account_view.display_label if account_view else 'Account not logged in' }}">
-      <form method="post" action="/accounts/{{ account.id }}/auth/device-login">
-        <button type="submit" class="{{ 'primary-action' if account.auth_status != 'connected' else 'secondary-button' }}">Login</button>
+      {% if account.auth_status == "connected" %}
+      <form method="post" action="/accounts/{{ account.id }}/anchors/run">
+        <button type="submit" class="primary-action">
+          Anchor
+        </button>
       </form>
+      <button type="button" class="secondary-button" data-drawer-open="account-settings-drawer-{{ account.id }}">
+        Settings
+      </button>
       <form method="post" action="/accounts/{{ account.id }}/auth/status">
-        <button type="submit" class="secondary-button">Check</button>
+        <button type="submit" class="secondary-button">Refresh auth</button>
+      </form>
+      <form method="post" action="/accounts/{{ account.id }}/auth/logout">
+        <button type="submit" class="danger-button">Logout</button>
+      </form>
+      {% else %}
+      <form method="post" action="/accounts/{{ account.id }}/auth/device-login">
+        <button type="submit" class="primary-action" {% if login %}disabled{% endif %}>Login</button>
       </form>
       {% if login %}
       <form method="post" action="/accounts/{{ account.id }}/auth/cancel">
         <button type="submit" class="secondary-button">Cancel</button>
       </form>
       {% endif %}
-      <form method="post" action="/accounts/{{ account.id }}/anchors/run">
-        <button
-          type="submit"
-          class="{{ 'primary-action' if account.auth_status == 'connected' else '' }}"
-          {% if account.auth_status != "connected" %}disabled{% endif %}
-        >
-          Anchor
-        </button>
-      </form>
-      <button type="button" class="secondary-button" data-drawer-open="settings-drawer">
+      <button type="button" class="secondary-button" data-drawer-open="account-settings-drawer-{{ account.id }}">
         Settings
       </button>
-      <form method="post" action="/accounts/{{ account.id }}/auth/logout">
-        <button type="submit" class="danger-button">Logout</button>
+      <form method="post" action="/accounts/{{ account.id }}/auth/status">
+        <button type="submit" class="secondary-button">Refresh auth</button>
       </form>
+      {% endif %}
     </div>
   </article>
   {% endfor %}
