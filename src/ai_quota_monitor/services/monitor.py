@@ -15,11 +15,14 @@ from ai_quota_monitor.services.scheduler import ScheduledAnchorJob
 class QuotaWindowView:
     key: str
     label: str
+    short_label: str
     used_percent_value: float | None
     used_percent_label: str
     configured_label: str
     expected_label: str
     observed_label: str
+    reset_time_label: str
+    reset_source_short_label: str
     reset_source_label: str
     status_label: str
     status_class: str
@@ -31,6 +34,7 @@ class AccountMonitorView:
     account_id: int
     name: str
     slug: str
+    display_label: str
     enabled_label: str
     auth_label: str
     account_display: str | None
@@ -56,6 +60,7 @@ class MonitorView:
     account_map: dict[int, AccountMonitorView]
     timeline: tuple[TimelineEntry, ...]
     generated_at_label: str
+    generated_clock_label: str
 
 
 def build_monitor_view(
@@ -91,6 +96,7 @@ def build_monitor_view(
         account_map={account.account_id: account for account in account_views},
         timeline=timeline,
         generated_at_label=_format_datetime(now, display_timezone),
+        generated_clock_label=_format_clock(now, display_timezone),
     )
 
 
@@ -216,6 +222,7 @@ def _account_view(
         account_id=account.id,
         name=account.name,
         slug=account.slug,
+        display_label=account.account_display or account.name,
         enabled_label="Enabled" if account.enabled else "Paused",
         auth_label=account.auth_status.replace("_", " ").title(),
         account_display=account.account_display,
@@ -289,11 +296,14 @@ def _window_view(
     return QuotaWindowView(
         key=key,
         label=label,
+        short_label="5h" if key == "five-hour" else "7d",
         used_percent_value=used_percent,
         used_percent_label=_percent_label(used_percent),
         configured_label=_configured_label(account, key),
         expected_label=_format_datetime(expected_reset_at, timezone),
         observed_label=_format_datetime(observed_reset_at, timezone),
+        reset_time_label=_format_clock(reset_at, timezone),
+        reset_source_short_label="obs" if observed_reset_at else "exp",
         reset_source_label="Observed" if observed_reset_at else "Expected",
         status_label=_window_status_label(
             snapshot,
@@ -465,6 +475,12 @@ def _format_datetime(value: datetime | None, timezone: ZoneInfo) -> str:
 
 def _format_time(value: time) -> str:
     return value.strftime("%H:%M")
+
+
+def _format_clock(value: datetime | None, timezone: ZoneInfo) -> str:
+    if value is None:
+        return "--:--"
+    return _as_aware_utc(value).astimezone(timezone).strftime("%H:%M")
 
 
 def _timezone(value: str) -> ZoneInfo:

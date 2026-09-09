@@ -1,0 +1,135 @@
+# Deployment Guide
+
+## Configuration
+
+Copy values from `.env.example` into your deployment environment.
+
+Important settings:
+
+| Variable | Purpose |
+| --- | --- |
+| `AI_QUOTA_MONITOR_ENV` | Environment label |
+| `AI_QUOTA_MONITOR_HOST` | Bind host |
+| `AI_QUOTA_MONITOR_PORT` | Bind port |
+| `AI_QUOTA_MONITOR_TIMEZONE` | Default display and schedule timezone |
+| `AI_QUOTA_MONITOR_DATABASE_URL` | SQLite database URL |
+| `AI_QUOTA_MONITOR_DATA_DIR` | Runtime data directory |
+| `AI_QUOTA_MONITOR_ENABLE_SCHEDULER` | Enable background scheduled anchors |
+| `AI_QUOTA_MONITOR_ENABLE_APP_SERVER_NOTIFICATIONS` | Enable live quota update listeners |
+| `AI_QUOTA_MONITOR_ENABLE_WEB_UPDATES` | Allow real native/Proxmox web updates |
+| `AI_QUOTA_MONITOR_DEPLOYMENT_MODE` | `auto`, `native`, `proxmox`, or `docker` |
+
+## Docker Compose
+
+Start:
+
+```bash
+docker compose up -d
+```
+
+Build and restart:
+
+```bash
+docker compose build --pull
+docker compose up -d
+```
+
+Docker uses:
+
+```text
+AI_QUOTA_MONITOR_HOST=0.0.0.0
+AI_QUOTA_MONITOR_PORT=8080
+AI_QUOTA_MONITOR_DATABASE_URL=sqlite:////var/lib/ai-quota-monitor/ai-quota-monitor.sqlite3
+AI_QUOTA_MONITOR_DATA_DIR=/var/lib/ai-quota-monitor
+AI_QUOTA_MONITOR_DEPLOYMENT_MODE=docker
+AI_QUOTA_MONITOR_ENABLE_WEB_UPDATES=false
+```
+
+Docker deployments are immutable from inside the running container. The dashboard can report update status, but real Docker updates should rebuild or pull the image and recreate the service.
+
+## Proxmox LXC
+
+Create a new LXC from a Proxmox host:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/nick-amorim/ai-quota-monitor/main/scripts/proxmox/install-lxc.sh)
+```
+
+Non-interactive creation with a chosen container ID:
+
+```bash
+AI_QUOTA_MONITOR_CT_ID=120 bash <(curl -fsSL https://raw.githubusercontent.com/nick-amorim/ai-quota-monitor/main/scripts/proxmox/install-lxc.sh) --yes
+```
+
+Advanced mode:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/nick-amorim/ai-quota-monitor/main/scripts/proxmox/install-lxc.sh) --advanced
+```
+
+Install into an existing Debian/Ubuntu LXC or VM:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/nick-amorim/ai-quota-monitor/main/scripts/proxmox/install-lxc.sh) --existing
+```
+
+Default Proxmox settings:
+
+| Setting | Value |
+| --- | --- |
+| OS | Debian 13 |
+| Type | Unprivileged LXC |
+| CPU | 1 core |
+| RAM | 1 GB |
+| Swap | 512 MB |
+| Disk | 8 GB |
+| Network | DHCP on `vmbr0` |
+| Port | 8080 |
+| Hostname | `ai-quota-monitor` |
+
+## Native Layout
+
+```text
+/opt/ai-quota-monitor/        application checkout and virtualenv
+/var/lib/ai-quota-monitor/    database, Codex homes, workspaces, runtime state
+/etc/ai-quota-monitor.env     deployment configuration
+/etc/systemd/system/          systemd service
+```
+
+Updates must preserve `/var/lib/ai-quota-monitor`.
+
+## Updates
+
+Preferred update command:
+
+```bash
+ai-quota-monitor-update --yes --restart
+```
+
+Dry run:
+
+```bash
+ai-quota-monitor-update --dry-run
+```
+
+Updater options:
+
+| Option | Purpose |
+| --- | --- |
+| `--dry-run` | Show backup and update steps without changing the checkout |
+| `--yes` | Run non-interactively |
+| `--advanced` | Print command details for each step |
+| `--restart` | Restart the configured systemd service after migrations |
+| `--install-dir PATH` | Override the Git checkout directory |
+| `--data-dir PATH` | Override runtime data directory |
+| `--backup-dir PATH` | Override backup directory |
+| `--deployment-mode MODE` | Force `native`, `proxmox`, `docker`, or `auto` |
+
+Aliases:
+
+```bash
+quotapilot-update --yes --restart
+update --yes --restart
+```
+
+`ai-quota-monitor-update` is the preferred explicit command name.

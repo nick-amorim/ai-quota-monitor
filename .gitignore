@@ -72,7 +72,7 @@ instance/
 docs/_build/
 
 # Local planning and draft documents
-docs/
+develop_docs/
 
 # PyBuilder
 .pybuilder/

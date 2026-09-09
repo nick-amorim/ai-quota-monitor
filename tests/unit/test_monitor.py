@@ -72,6 +72,12 @@ def test_monitor_view_reports_weekly_drift_and_today_timeline(tmp_path):
         account = view.account_map[1]
         five_hour, weekly = account.windows
 
+        assert view.generated_clock_label == "01:00"
+        assert account.display_label == "Account A"
+        assert five_hour.short_label == "5h"
+        assert five_hour.reset_time_label == "10:00"
+        assert five_hour.reset_source_short_label == "obs"
+        assert weekly.short_label == "7d"
         assert five_hour.configured_label.startswith("05:00 + 5h")
         assert five_hour.observed_label == "2026-01-05 10:00:00"
         assert weekly.drift_label == "Weekly drift 60 min late"

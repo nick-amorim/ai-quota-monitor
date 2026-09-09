@@ -6,14 +6,12 @@
   hx-swap="outerHTML"
 >
   <header class="monitor-toolbar">
-    <div>
-      <p class="eyebrow">Generated</p>
-      <h2>{{ monitor_view.generated_at_label }}</h2>
-    </div>
+    <span class="monitor-live" aria-hidden="true"></span>
+    <time title="{{ monitor_view.generated_at_label }}">{{ monitor_view.generated_clock_label }}</time>
     <nav class="monitor-links" aria-label="Monitor accounts">
       <a href="/monitor">All</a>
       {% for account in monitor_view.accounts %}
-      <a href="/monitor/{{ account.slug }}">{{ account.name }}</a>
+      <a href="/monitor/{{ account.slug }}">{{ account.slug }}</a>
       {% endfor %}
     </nav>
   </header>
@@ -22,60 +20,44 @@
     {% for account in monitor_view.accounts %}
     <article class="monitor-card monitor-card--{{ account.snapshot_status_class }}">
       <header class="monitor-card__header">
-        <div>
-          <p class="eyebrow">{{ account.slug }}</p>
-          <h3>{{ account.name }}</h3>
-        </div>
-        <span>{{ account.auth_label }}</span>
+        <h3>{{ account.display_label }}</h3>
+        <span
+          class="monitor-auth-dot monitor-auth-dot--{{ account.snapshot_status_class }}"
+          title="{{ account.auth_label }}; {{ account.snapshot_status_label }}"
+          aria-label="{{ account.auth_label }}; {{ account.snapshot_status_label }}"
+        ></span>
       </header>
-
-      {% if account.account_display %}
-      <p class="monitor-account">{{ account.account_display }}</p>
-      {% endif %}
 
       <div class="monitor-windows">
         {% for window in account.windows %}
-        <section class="monitor-window monitor-window--{{ window.status_class }}">
-          <div>
-            <span>{{ window.label }}</span>
-            <small>{{ window.status_label }}</small>
+        <section
+          class="monitor-window monitor-window--{{ window.status_class }}"
+          aria-label="{{ account.display_label }} {{ window.label }} {{ window.used_percent_label }}"
+        >
+          <div class="monitor-window__top">
+            <span class="monitor-window__icon" aria-hidden="true">{{ window.short_label }}</span>
+            <strong>{{ window.used_percent_label }}</strong>
+            <span
+              class="monitor-state-dot monitor-state-dot--{{ window.status_class }}"
+              title="{{ window.status_label }}"
+              aria-label="{{ window.status_label }}"
+            ></span>
           </div>
-          <strong>{{ window.used_percent_label }}</strong>
           <div class="usage-meter" aria-hidden="true">
             <span style="width: {{ window.used_percent_value or 0 }}%"></span>
           </div>
-          <dl>
-            <div>
-              <dt>Configured</dt>
-              <dd>{{ window.configured_label }}</dd>
-            </div>
-            <div>
-              <dt>Expected</dt>
-              <dd>{{ window.expected_label }}</dd>
-            </div>
-            <div>
-              <dt>Observed</dt>
-              <dd>{{ window.observed_label }}</dd>
-            </div>
+          <div class="monitor-window__meta">
+            <span title="{{ window.reset_source_label }} reset: {{ window.observed_label if window.reset_source_label == 'Observed' else window.expected_label }}">
+              {{ window.reset_source_short_label }} {{ window.reset_time_label }}
+            </span>
             {% if window.drift_label %}
-            <div>
-              <dt>Drift</dt>
-              <dd>{{ window.drift_label }}</dd>
-            </div>
+            <span title="{{ window.drift_label }}">{{ window.drift_label.replace("Weekly drift ", "") }}</span>
             {% endif %}
-          </dl>
+          </div>
         </section>
         {% endfor %}
       </div>
-
-      <footer>
-        <span>{{ account.enabled_label }}</span>
-        <span>{{ account.captured_label }}</span>
-      </footer>
     </article>
     {% endfor %}
   </div>
-
-  {% set timeline = monitor_view.timeline %}
-  {% include "_timeline.html" %}
 </section>
