@@ -39,6 +39,15 @@ class BusyAnchorService:
         raise AnchorAlreadyRunningError(f"Anchor already running for account {account_id}")
 
 
+class FakeTelemetryRefresher:
+    def __init__(self):
+        self.calls = 0
+
+    def refresh_connected_accounts(self):
+        self.calls += 1
+        return []
+
+
 def make_scheduler(tmp_path, anchor_runner=None):
     settings = Settings(
         database_url=f"sqlite:///{tmp_path / 'ai-quota-monitor.sqlite3'}",
@@ -172,6 +181,41 @@ def test_scheduled_anchor_job_logs_concurrency_skip(tmp_path):
 
         assert event.level == "warning"
         assert event.account_id == 1
+    finally:
+        scheduler.shutdown()
+        engine.dispose()
+
+
+def test_scheduler_adds_automatic_usage_refresh_job(tmp_path):
+    settings = Settings(
+        database_url=f"sqlite:///{tmp_path / 'ai-quota-monitor.sqlite3'}",
+        data_dir=tmp_path,
+        usage_poll_interval_minutes=2,
+    )
+    run_migrations(settings)
+    engine = create_database_engine(settings)
+    initialize_database(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        seed_defaults(session, settings)
+
+    telemetry = FakeTelemetryRefresher()
+    scheduler = QuotaScheduler(
+        session_factory,
+        FakeScheduledAnchorRunner(),
+        settings,
+        telemetry,
+    )
+    scheduler.start()
+
+    try:
+        job = scheduler._scheduler.get_job("telemetry:refresh-all")
+        assert job is not None
+        assert job.trigger.interval.total_seconds() == 120
+
+        scheduler.run_usage_refresh_job()
+
+        assert telemetry.calls >= 1
     finally:
         scheduler.shutdown()
         engine.dispose()

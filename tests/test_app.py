@@ -79,6 +79,14 @@ class FakeTelemetryBackend:
         }
 
 
+class FailingTelemetryBackend:
+    def read_account(self, account):
+        return {"requiresOpenaiAuth": False}
+
+    def read_rate_limits(self, account):
+        raise FileNotFoundError("No such file or directory: 'codex'")
+
+
 class FakeSystemService:
     def __init__(self, settings):
         self.settings = settings
@@ -182,6 +190,8 @@ def test_dashboard_shell_renders(tmp_path):
     assert "Global anchor prompt" in response.text
     assert "Scheduled anchors" in response.text
     assert "Timeline" in response.text
+    assert "Next wake" in response.text
+    assert "Mon-Fri 05:00" in response.text
     assert "Deployment and updates" in response.text
     assert "Check update plan" in response.text
     assert 'data-theme-toggle' in response.text
@@ -332,7 +342,7 @@ def test_manual_anchor_route_records_history(tmp_path):
     assert "Recent anchor runs" in dashboard.text
     assert "Completed" in dashboard.text
     assert "OK" in dashboard.text
-    assert "72.0%" in dashboard.text
+    assert "28.0%" in dashboard.text
 
 
 def test_usage_refresh_route_records_quota_snapshot(tmp_path):
@@ -347,12 +357,33 @@ def test_usage_refresh_route_records_quota_snapshot(tmp_path):
 
     assert response.status_code == 303
     assert "Quota telemetry" in dashboard.text
-    assert "Configured" in dashboard.text
-    assert "Next:" in dashboard.text
-    assert "+ 5h (" not in dashboard.text
-    assert "Weekly drift" in dashboard.text
-    assert "72" in dashboard.text
-    assert "43" in dashboard.text
+    assert "Reset" in dashboard.text
+    assert "Anchor" in dashboard.text
+    assert "Configured:" not in dashboard.text
+    assert "28.0%" in dashboard.text
+    assert "57.0%" in dashboard.text
+
+
+def test_usage_refresh_route_surfaces_refresh_failure(tmp_path):
+    app = create_app(
+        make_settings(tmp_path),
+        auth_backend_factory=FakeAuthBackend,
+        anchor_backend_factory=FakeAnchorBackend,
+        telemetry_backend_factory=FailingTelemetryBackend,
+        system_service_factory=FakeSystemService,
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/accounts/1/usage/refresh",
+            follow_redirects=False,
+        )
+        dashboard = client.get("/")
+
+    assert response.status_code == 303
+    assert "Telemetry error" in dashboard.text
+    assert "Cannot read Codex usage" in dashboard.text
+    assert "Codex CLI is not available" in dashboard.text
 
 
 def test_history_route_filters_events(tmp_path):
@@ -398,7 +429,7 @@ def test_partial_routes_render_refreshable_sections(tmp_path):
 
     assert usage.status_code == 200
     assert "Quota telemetry" in usage.text
-    assert "72" in usage.text
+    assert "28.0%" in usage.text
     assert accounts.status_code == 200
     assert 'id="account-grid"' in accounts.text
     assert "Last anchor" in accounts.text
@@ -427,7 +458,7 @@ def test_monitor_route_renders_compact_quota_view(tmp_path):
     assert "Account not logged in" in response.text
     assert "Account A" not in response.text
     assert "5-hour" in response.text
-    assert "Weekly drift" in response.text
+    assert "57.0%" in response.text
 
 
 def test_account_monitor_and_partial_filter_to_slug(tmp_path):

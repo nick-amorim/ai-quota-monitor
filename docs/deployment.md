@@ -51,6 +51,13 @@ AI_QUOTA_MONITOR_ENABLE_WEB_UPDATES=false
 
 Docker deployments are immutable from inside the running container. The dashboard can report update status, but real Docker updates should rebuild or pull the image and recreate the service.
 
+Quota telemetry uses `codex app-server` inside the container. The image validates that the packaged Codex CLI runtime is present during build. If the dashboard reports `Codex CLI is not available`, rebuild and recreate the container:
+
+```bash
+docker compose build --pull
+docker compose up -d
+```
+
 ## Proxmox LXC
 
 Create a new LXC from a Proxmox host:

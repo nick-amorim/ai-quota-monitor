@@ -43,11 +43,15 @@
       <dl class="schedule-summary">
         <div>
           <dt>Daily</dt>
-          <dd>{{ account.schedule.daily_anchor_time.strftime('%H:%M') }}</dd>
+          <dd>{{ account_view.daily_schedule_label if account_view else "Off" }}</dd>
         </div>
         <div>
           <dt>Weekly</dt>
-          <dd>{{ account.schedule.weekly_target_day | title }} {{ account.schedule.weekly_target_time.strftime('%H:%M') }}</dd>
+          <dd>{{ account_view.weekly_schedule_label if account_view else "Off" }}</dd>
+        </div>
+        <div>
+          <dt>Next wake</dt>
+          <dd>{{ account_view.next_wake_label if account_view else "None" }}</dd>
         </div>
       </dl>
 

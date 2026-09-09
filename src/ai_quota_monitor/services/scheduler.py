@@ -9,6 +9,7 @@ from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_MISSED, JobExecutionEv
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.schedulers.base import SchedulerNotRunningError
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy.orm import Session, sessionmaker
 
 from ai_quota_monitor.config import Settings
@@ -19,6 +20,7 @@ from ai_quota_monitor.services.events import record_event
 from ai_quota_monitor.services.smart_anchors import SmartAnchorResult
 
 SCHEDULER_JOB_PREFIX = "anchor:"
+TELEMETRY_JOB_ID = "telemetry:refresh-all"
 AP_DAYS = {
     "monday": "mon",
     "tuesday": "tue",
@@ -69,16 +71,23 @@ class ScheduledAnchorRunner(Protocol):
         ...
 
 
+class UsageTelemetryRefresher(Protocol):
+    def refresh_connected_accounts(self) -> object:
+        ...
+
+
 class QuotaScheduler:
     def __init__(
         self,
         session_factory: sessionmaker[Session],
         anchor_runner: ScheduledAnchorRunner,
         settings: Settings,
+        telemetry_refresher: UsageTelemetryRefresher | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._anchor_runner = anchor_runner
         self._settings = settings
+        self._telemetry_refresher = telemetry_refresher
         self._scheduler: BackgroundScheduler | None = None
 
     @property
@@ -128,6 +137,7 @@ class QuotaScheduler:
 
         scheduler = self._require_scheduler()
         self._remove_anchor_jobs()
+        self._sync_telemetry_job()
         runtime_config = self._runtime_config()
 
         added = 0
@@ -262,6 +272,20 @@ class QuotaScheduler:
                 },
             )
 
+    def run_usage_refresh_job(self) -> None:
+        if self._telemetry_refresher is None:
+            return
+        try:
+            self._telemetry_refresher.refresh_connected_accounts()
+        except Exception as exc:
+            self._record_event(
+                level="error",
+                category="scheduler.telemetry",
+                message="Scheduled usage refresh failed",
+                payload={"error": str(exc)},
+            )
+            raise
+
     def _require_scheduler(self) -> BackgroundScheduler:
         if self._scheduler is None:
             raise RuntimeError("Scheduler has not been started")
@@ -272,6 +296,30 @@ class QuotaScheduler:
         for job in scheduler.get_jobs():
             if job.id.startswith(SCHEDULER_JOB_PREFIX):
                 scheduler.remove_job(job.id)
+
+    def _sync_telemetry_job(self) -> None:
+        scheduler = self._require_scheduler()
+        existing = scheduler.get_job(TELEMETRY_JOB_ID)
+        if existing is not None:
+            scheduler.remove_job(TELEMETRY_JOB_ID)
+
+        if self._telemetry_refresher is None:
+            return
+
+        interval_minutes = max(1, self._settings.usage_poll_interval_minutes)
+        scheduler.add_job(
+            self.run_usage_refresh_job,
+            trigger=IntervalTrigger(
+                minutes=interval_minutes,
+                timezone=_timezone(self._settings.timezone),
+            ),
+            id=TELEMETRY_JOB_ID,
+            max_instances=1,
+            misfire_grace_time=max(30, interval_minutes * 60),
+            name="Codex usage telemetry refresh",
+            next_run_time=datetime.now(_timezone(self._settings.timezone)),
+            replace_existing=True,
+        )
 
     def _record_apscheduler_event(self, event: JobExecutionEvent) -> None:
         if not event.job_id.startswith(SCHEDULER_JOB_PREFIX):

@@ -21,6 +21,8 @@ COPY src ./src
 RUN python -m pip install --no-cache-dir --upgrade pip \
     && python -m pip install --no-cache-dir .
 
+RUN python -c "from codex_cli_bin import bundled_codex_path; print(bundled_codex_path())"
+
 RUN mkdir -p /var/lib/ai-quota-monitor \
     && chown -R aiquota:aiquota /var/lib/ai-quota-monitor /opt/ai-quota-monitor
 

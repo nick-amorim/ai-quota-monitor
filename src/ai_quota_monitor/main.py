@@ -55,7 +55,7 @@ def create_app(
         TelemetryBackend,
     ] = CodexAppServerTelemetryBackend,
     scheduler_factory: Callable[
-        [sessionmaker[Session], SmartAnchorService, Settings],
+        [sessionmaker[Session], SmartAnchorService, Settings, TelemetryService],
         SchedulerService,
     ] = QuotaScheduler,
     system_service_factory: Callable[[Settings], SystemService] = SystemService,
@@ -107,6 +107,7 @@ def create_app(
             session_factory,
             app.state.smart_anchor_service,
             app_settings,
+            app.state.telemetry_service,
         )
         if app_settings.enable_scheduler:
             app.state.quota_scheduler.start()

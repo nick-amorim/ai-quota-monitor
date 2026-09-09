@@ -640,7 +640,7 @@ main {
 }
 
 .schedule-summary {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
 }
 
 .anchor-feedback {
@@ -800,6 +800,22 @@ main {
   margin-top: 0.35rem;
   color: var(--bad);
   font-weight: 800;
+}
+
+.usage-callout {
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 0.55rem 0.65rem;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
+.usage-callout--error {
+  border-color: var(--bad-line);
+  background: var(--bad-bg);
+  color: var(--bad);
 }
 
 .settings-panel,

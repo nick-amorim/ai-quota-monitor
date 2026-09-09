@@ -36,7 +36,7 @@
         >
           <div class="monitor-window__top">
             <span class="monitor-window__icon" aria-hidden="true">{{ window.short_label }}</span>
-            <strong>{{ window.used_percent_label }}</strong>
+            <strong>{{ window.remaining_percent_label }}</strong>
             <span
               class="monitor-state-dot monitor-state-dot--{{ window.status_class }}"
               title="{{ window.status_label }}"
@@ -44,7 +44,7 @@
             ></span>
           </div>
           <div class="usage-meter" aria-hidden="true">
-            <span style="width: {{ window.used_percent_value or 0 }}%"></span>
+            <span style="width: {{ window.remaining_percent_value or 0 }}%"></span>
           </div>
           <div class="monitor-window__meta">
             <span>{{ window.reset_source_short_label }} {{ window.reset_time_label }}</span>
@@ -55,6 +55,9 @@
         </section>
         {% endfor %}
       </div>
+      {% if account.telemetry_error %}
+      <footer title="{{ account.telemetry_error }}">Telemetry error</footer>
+      {% endif %}
     </article>
     {% endfor %}
   </div>

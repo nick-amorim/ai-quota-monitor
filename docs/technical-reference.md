@@ -103,6 +103,10 @@ Observed reset timestamps from Codex are stored separately from expected reset t
 
 If app-server payloads are sparse, missing normalized fields carry forward the previous known value. If neither known window can be found, the raw payload is retained and the snapshot is marked `unsupported`.
 
+The database stores Codex's `usedPercent` values. Dashboard and monitor cards display remaining quota as `100 - usedPercent` so the UI aligns with Codex's `Usage remaining` menu.
+
+Manual refresh failures are recorded as `telemetry.refresh.failed` warning events. If no newer successful snapshot exists, the account card enters a telemetry-error state with the stored failure detail.
+
 ## Live Updates
 
 When enabled, the app keeps long-running app-server listeners open for connected accounts. `account/rateLimits/updated` notifications are normalized through the same raw-plus-snapshot path as manual refreshes.
@@ -150,6 +154,8 @@ Missed jobs use `AI_QUOTA_MONITOR_MISSED_ANCHOR_POLICY`:
 
 Smart scheduled anchors refresh telemetry before and after the anchor and record whether reset timing changed.
 
+The same APScheduler instance also owns the automatic telemetry poll job, `telemetry:refresh-all`. It runs every `AI_QUOTA_MONITOR_USAGE_POLL_INTERVAL_MINUTES` minutes and refreshes connected, enabled accounts only.
+
 ## Partial Refreshes
 
 The frontend uses server-rendered partials:
@@ -171,11 +177,13 @@ The dashboard is a dark-first operational interface with an optional persisted l
 
 Visible account labels use the Codex account email when available. Until an account is authenticated, the UI uses `Account not logged in` instead of internal seed labels such as Account A or Account B.
 
+Account cards show compact schedule context: all enabled daily weekdays, the weekly target, and the next scheduled wake call from APScheduler.
+
 All frontend timestamps are formatted in the configured application timezone. SQLite may return UTC datetimes without timezone metadata, so display formatters treat naive database values as UTC before converting them to the local display timezone.
 
 Dashboard quota windows intentionally use compact labels:
 
-- 5-hour: `Configured: HH:MM / Next: HH:MM`
-- weekly: `Configured: Weekday HH:MM / Next: Day HH:MM`
+- 5-hour: remaining percent, `Reset HH:MM`, and `Anchor HH:MM`
+- weekly: remaining percent, `Reset Day HH:MM`, and `Anchor Weekday HH:MM`
 
 The monitor view is dark-only and intentionally dense. It hides the normal app bar, omits the timeline, and uses compact account labels, status dots, reset chips, and quota bars for a 3.7-inch Raspberry Pi display.

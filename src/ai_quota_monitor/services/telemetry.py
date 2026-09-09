@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -9,14 +10,18 @@ from typing import Any, Protocol
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 
-from ai_quota_monitor.models import Account, UsageRaw, UsageSnapshot
+from ai_quota_monitor.models import Account, EventLog, UsageRaw, UsageSnapshot
 from ai_quota_monitor.services.accounts import list_accounts
 from ai_quota_monitor.services.app_server import CodexAppServerClient
+from ai_quota_monitor.services.events import record_event
 from ai_quota_monitor.services.reset_times import expected_reset_times
 
 PARSER_VERSION = "rate-limits-v1"
 FIVE_HOUR_WINDOW_MINUTES = 300
 WEEKLY_WINDOW_MINUTES = 10080
+TELEMETRY_REFRESH_FAILED_CATEGORY = "telemetry.refresh.failed"
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -79,7 +84,15 @@ class TelemetryService:
         try:
             payload = self._backend_factory().read_rate_limits(account)
         except Exception as exc:
-            return TelemetryRefreshResult(account_id=account_id, status="failed", error=str(exc))
+            error = _friendly_refresh_error(exc)
+            logger.warning(
+                "Usage refresh failed for account %s: %s",
+                account_id,
+                error,
+                exc_info=True,
+            )
+            self._record_refresh_failure(account_id, error)
+            return TelemetryRefreshResult(account_id=account_id, status="failed", error=error)
 
         return self.record_rate_limit_update(
             account_id,
@@ -140,6 +153,19 @@ class TelemetryService:
         with self._session_factory() as session:
             account_ids = [account.id for account in list_accounts(session)]
 
+        return self._refresh_account_ids(account_ids)
+
+    def refresh_connected_accounts(self) -> list[TelemetryRefreshResult]:
+        with self._session_factory() as session:
+            account_ids = [
+                account.id
+                for account in list_accounts(session)
+                if account.enabled and account.auth_status == "connected"
+            ]
+
+        return self._refresh_account_ids(account_ids)
+
+    def _refresh_account_ids(self, account_ids: list[int]) -> list[TelemetryRefreshResult]:
         results = []
         for account_id in account_ids:
             try:
@@ -163,6 +189,26 @@ class TelemetryService:
                 if (snapshot := latest_usage_snapshot(session, account_id)) is not None
             }
 
+    def latest_refresh_errors_by_account(self) -> dict[int, str]:
+        with self._session_factory() as session:
+            account_ids = [account.id for account in list_accounts(session)]
+            return {
+                account_id: error
+                for account_id in account_ids
+                if (error := _latest_refresh_error(session, account_id)) is not None
+            }
+
+    def _record_refresh_failure(self, account_id: int, error: str) -> None:
+        with self._session_factory() as session:
+            record_event(
+                session,
+                level="warning",
+                category=TELEMETRY_REFRESH_FAILED_CATEGORY,
+                message="Usage refresh failed",
+                account_id=account_id,
+                payload={"error": error},
+            )
+
 
 def latest_usage_snapshot(session: Session, account_id: int) -> UsageSnapshot | None:
     return session.scalar(
@@ -172,6 +218,36 @@ def latest_usage_snapshot(session: Session, account_id: int) -> UsageSnapshot | 
         .order_by(UsageSnapshot.captured_at.desc(), UsageSnapshot.id.desc())
         .limit(1)
     )
+
+
+def _latest_refresh_error(session: Session, account_id: int) -> str | None:
+    event = session.scalar(
+        select(EventLog)
+        .where(
+            EventLog.account_id == account_id,
+            EventLog.category == TELEMETRY_REFRESH_FAILED_CATEGORY,
+        )
+        .order_by(EventLog.created_at.desc(), EventLog.id.desc())
+        .limit(1)
+    )
+    if event is None:
+        return None
+
+    snapshot = latest_usage_snapshot(session, account_id)
+    if snapshot is not None and _as_aware_utc(event.created_at) <= _as_aware_utc(
+        snapshot.captured_at
+    ):
+        return None
+
+    if event.payload_json:
+        try:
+            payload = json.loads(event.payload_json)
+        except json.JSONDecodeError:
+            payload = {}
+        error = payload.get("error")
+        if isinstance(error, str) and error:
+            return error
+    return event.message
 
 
 def normalize_rate_limits(payload: dict[str, Any]) -> NormalizedUsage:
@@ -320,3 +396,19 @@ def _unix_seconds_to_datetime(value: Any) -> datetime | None:
     if value is None:
         return None
     return datetime.fromtimestamp(int(value), UTC)
+
+
+def _friendly_refresh_error(exc: Exception) -> str:
+    detail = str(exc)
+    if isinstance(exc, FileNotFoundError) or "No such file or directory" in detail:
+        return (
+            "Codex CLI is not available in this runtime. Rebuild the Docker image "
+            "or install the openai-codex CLI dependency."
+        )
+    return detail
+
+
+def _as_aware_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)

@@ -42,8 +42,17 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 request.app.state.settings.anchor_prompt,
             )
         usage_by_account = request.app.state.telemetry_service.latest_snapshots_by_account()
+        telemetry_errors_by_account = (
+            request.app.state.telemetry_service.latest_refresh_errors_by_account()
+        )
         scheduled_jobs = request.app.state.quota_scheduler.next_runs()
-        monitor_view = _monitor_view(request, accounts, usage_by_account, scheduled_jobs)
+        monitor_view = _monitor_view(
+            request,
+            accounts,
+            usage_by_account,
+            scheduled_jobs,
+            telemetry_errors_by_account=telemetry_errors_by_account,
+        )
         system_info = request.app.state.system_service.info()
         anchor_runs = request.app.state.anchor_service.recent_runs(limit=8)
 
@@ -78,8 +87,17 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
         with session_factory() as session:
             accounts = list_accounts(session)
         usage_by_account = request.app.state.telemetry_service.latest_snapshots_by_account()
+        telemetry_errors_by_account = (
+            request.app.state.telemetry_service.latest_refresh_errors_by_account()
+        )
         scheduled_jobs = request.app.state.quota_scheduler.next_runs()
-        monitor_view = _monitor_view(request, accounts, usage_by_account, scheduled_jobs)
+        monitor_view = _monitor_view(
+            request,
+            accounts,
+            usage_by_account,
+            scheduled_jobs,
+            telemetry_errors_by_account=telemetry_errors_by_account,
+        )
         anchor_runs = request.app.state.anchor_service.recent_runs(limit=8)
 
         return templates.TemplateResponse(
@@ -199,11 +217,15 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
             if account is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
         usage_by_account = request.app.state.telemetry_service.latest_snapshots_by_account()
+        telemetry_errors_by_account = (
+            request.app.state.telemetry_service.latest_refresh_errors_by_account()
+        )
         monitor_view = _monitor_view(
             request,
             [account],
             usage_by_account,
             request.app.state.quota_scheduler.next_runs(),
+            telemetry_errors_by_account=telemetry_errors_by_account,
         )
 
         return templates.TemplateResponse(
@@ -434,12 +456,21 @@ def _load_monitor_view(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
     usage_by_account = request.app.state.telemetry_service.latest_snapshots_by_account()
+    telemetry_errors_by_account = (
+        request.app.state.telemetry_service.latest_refresh_errors_by_account()
+    )
     scheduled_jobs = [
         job
         for job in request.app.state.quota_scheduler.next_runs()
         if account_slug is None or any(account.id == job.account_id for account in accounts)
     ]
-    return _monitor_view(request, accounts, usage_by_account, scheduled_jobs)
+    return _monitor_view(
+        request,
+        accounts,
+        usage_by_account,
+        scheduled_jobs,
+        telemetry_errors_by_account=telemetry_errors_by_account,
+    )
 
 
 def _monitor_view(
@@ -447,10 +478,13 @@ def _monitor_view(
     accounts,
     usage_by_account,
     scheduled_jobs,
+    *,
+    telemetry_errors_by_account=None,
 ) -> MonitorView:
     return build_monitor_view(
         accounts=accounts,
         usage_by_account=usage_by_account,
+        telemetry_errors_by_account=telemetry_errors_by_account,
         scheduled_jobs=scheduled_jobs,
         settings=request.app.state.settings,
         now=datetime.now(UTC),

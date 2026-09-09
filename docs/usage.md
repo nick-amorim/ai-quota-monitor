@@ -43,7 +43,9 @@ If both configured accounts resolve to the same Codex account identity, the late
 
 ## Quota Telemetry
 
-Use `Refresh usage` on the dashboard to refresh all account telemetry, or refresh a single account from its account panel.
+Connected accounts are refreshed automatically every `AI_QUOTA_MONITOR_USAGE_POLL_INTERVAL_MINUTES` minutes. Use `Refresh usage` when you want an immediate manual refresh.
+
+The dashboard and compact monitor display remaining quota percentage, matching the Codex usage menu. The app stores Codex's raw `usedPercent` values and derives remaining quota as `100 - usedPercent` for display.
 
 The app stores:
 
@@ -73,7 +75,7 @@ The scheduler creates:
 - one daily anchor job per enabled account when daily anchors are enabled;
 - one weekly target anchor job per enabled account.
 
-Schedule edits are saved from the Settings drawer and reloaded without restarting the app.
+Schedule edits are saved from the Settings drawer and reloaded without restarting the app. Account cards show the enabled daily weekdays, weekly target, and next scheduled wake call.
 
 Smart scheduled-anchor validation:
 
@@ -101,7 +103,7 @@ http://127.0.0.1:8080/monitor/account-b
 The monitor is dark-only and optimized for small always-on screens. It refreshes every 15 seconds and shows:
 
 - account email when known;
-- 5-hour and weekly quota percentages;
+- 5-hour and weekly remaining quota percentages;
 - progress bars;
 - compact status dots;
 - observed or expected reset time.

@@ -7,7 +7,17 @@ from zoneinfo import ZoneInfo
 from ai_quota_monitor.config import Settings
 from ai_quota_monitor.models import Account, UsageSnapshot
 from ai_quota_monitor.services.reset_times import expected_reset_times
-from ai_quota_monitor.services.scheduler import ScheduledAnchorJob
+from ai_quota_monitor.services.scheduler import AP_DAYS, ScheduledAnchorJob
+
+DAY_SHORT_LABELS = {
+    "monday": "Mon",
+    "tuesday": "Tue",
+    "wednesday": "Wed",
+    "thursday": "Thu",
+    "friday": "Fri",
+    "saturday": "Sat",
+    "sunday": "Sun",
+}
 
 
 @dataclass(frozen=True)
@@ -17,6 +27,8 @@ class QuotaWindowView:
     short_label: str
     used_percent_value: float | None
     used_percent_label: str
+    remaining_percent_value: float | None
+    remaining_percent_label: str
     configured_label: str
     configured_short_label: str
     expected_label: str
@@ -40,6 +52,10 @@ class AccountMonitorView:
     enabled_label: str
     auth_label: str
     account_display: str | None
+    daily_schedule_label: str
+    weekly_schedule_label: str
+    next_wake_label: str
+    telemetry_error: str | None
     has_snapshot: bool
     captured_label: str
     snapshot_status_label: str
@@ -69,6 +85,7 @@ def build_monitor_view(
     *,
     accounts: list[Account],
     usage_by_account: dict[int, UsageSnapshot],
+    telemetry_errors_by_account: dict[int, str] | None = None,
     scheduled_jobs: list[ScheduledAnchorJob],
     settings: Settings,
     now: datetime | None = None,
@@ -80,6 +97,10 @@ def build_monitor_view(
         _account_view(
             account,
             usage_by_account.get(account.id),
+            scheduled_jobs=[
+                job for job in scheduled_jobs if job.account_id == account.id
+            ],
+            telemetry_error=(telemetry_errors_by_account or {}).get(account.id),
             now=now,
             timezone=display_timezone,
             stale_after=stale_after,
@@ -213,6 +234,8 @@ def _account_view(
     account: Account,
     snapshot: UsageSnapshot | None,
     *,
+    scheduled_jobs: list[ScheduledAnchorJob],
+    telemetry_error: str | None = None,
     now: datetime,
     timezone: ZoneInfo,
     stale_after: timedelta,
@@ -231,14 +254,14 @@ def _account_view(
         enabled_label="Enabled" if account.enabled else "Paused",
         auth_label=account.auth_status.replace("_", " ").title(),
         account_display=account.account_display,
+        daily_schedule_label=_daily_schedule_label(account),
+        weekly_schedule_label=_weekly_schedule_label(account),
+        next_wake_label=_next_wake_label(scheduled_jobs, timezone),
+        telemetry_error=telemetry_error,
         has_snapshot=snapshot is not None,
-        captured_label=(
-            _format_datetime(snapshot.captured_at, timezone)
-            if snapshot is not None
-            else "Waiting for telemetry"
-        ),
-        snapshot_status_label=_snapshot_status_label(snapshot, stale),
-        snapshot_status_class=_snapshot_status_class(snapshot, stale),
+        captured_label=_captured_label(snapshot, telemetry_error, timezone),
+        snapshot_status_label=_snapshot_status_label(snapshot, stale, telemetry_error),
+        snapshot_status_class=_snapshot_status_class(snapshot, stale, telemetry_error),
         windows=(
             _window_view(
                 "five-hour",
@@ -259,6 +282,7 @@ def _account_view(
                 now=now,
                 timezone=timezone,
                 stale=stale,
+                telemetry_error=telemetry_error,
             ),
             _window_view(
                 "weekly",
@@ -279,6 +303,7 @@ def _account_view(
                 now=now,
                 timezone=timezone,
                 stale=stale,
+                telemetry_error=telemetry_error,
             ),
         ),
     )
@@ -296,14 +321,18 @@ def _window_view(
     now: datetime,
     timezone: ZoneInfo,
     stale: bool,
+    telemetry_error: str | None,
 ) -> QuotaWindowView:
     reset_at = observed_reset_at or expected_reset_at
+    remaining_percent = _remaining_percent(used_percent)
     return QuotaWindowView(
         key=key,
         label=label,
         short_label="5h" if key == "five-hour" else "7d",
         used_percent_value=used_percent,
         used_percent_label=_percent_label(used_percent),
+        remaining_percent_value=remaining_percent,
+        remaining_percent_label=_percent_label(remaining_percent),
         configured_label=_configured_label(account, key),
         configured_short_label=_configured_short_label(account, key),
         expected_label=_format_datetime(expected_reset_at, timezone),
@@ -318,8 +347,14 @@ def _window_view(
             reset_at,
             now=now,
             stale=stale,
+            telemetry_error=telemetry_error,
         ),
-        status_class=_window_status_class(snapshot, used_percent, stale=stale),
+        status_class=_window_status_class(
+            snapshot,
+            used_percent,
+            stale=stale,
+            telemetry_error=telemetry_error,
+        ),
         drift_label=(
             _drift_label(observed_reset_at, expected_reset_at)
             if key == "weekly"
@@ -372,6 +407,50 @@ def _configured_label(account: Account, key: str) -> str:
     return f"{_format_time(schedule.daily_anchor_time)} + 5h"
 
 
+def _daily_schedule_label(account: Account) -> str:
+    schedule = account.schedule
+    if schedule is None or not schedule.daily_anchor_enabled:
+        return "Off"
+    days = _active_days_label(account)
+    return f"{days} {_format_time(schedule.daily_anchor_time)}"
+
+
+def _weekly_schedule_label(account: Account) -> str:
+    schedule = account.schedule
+    if schedule is None:
+        return "Off"
+    day = DAY_SHORT_LABELS.get(schedule.weekly_target_day, schedule.weekly_target_day.title())
+    return f"{day} {_format_time(schedule.weekly_target_time)}"
+
+
+def _active_days_label(account: Account) -> str:
+    schedule = account.schedule
+    if schedule is None:
+        return "-"
+
+    enabled_days = [
+        day
+        for day in DAY_SHORT_LABELS
+        if getattr(schedule, f"{day}_enabled")
+    ]
+    labels = [DAY_SHORT_LABELS[day] for day in enabled_days]
+    if [AP_DAYS[day] for day in enabled_days] == ["mon", "tue", "wed", "thu", "fri"]:
+        return "Mon-Fri"
+    if len(enabled_days) == len(DAY_SHORT_LABELS):
+        return "Every day"
+    return ", ".join(labels) if labels else "No days"
+
+
+def _next_wake_label(jobs: list[ScheduledAnchorJob], timezone: ZoneInfo) -> str:
+    next_jobs = [job for job in jobs if job.next_run_at is not None]
+    if not next_jobs:
+        return "None"
+
+    job = min(next_jobs, key=lambda item: _as_aware_utc(item.next_run_at))
+    local_run = _as_aware_utc(job.next_run_at).astimezone(timezone)
+    return f"{job.kind.title()} {local_run.strftime('%a %H:%M')}"
+
+
 def _display_label(account: Account) -> str:
     return account.account_display or "Account not logged in"
 
@@ -381,7 +460,11 @@ def _configured_short_label(account: Account, key: str) -> str:
     if schedule is None:
         return "-"
     if key == "weekly":
-        return f"{schedule.weekly_target_day.title()} {_format_time(schedule.weekly_target_time)}"
+        day = DAY_SHORT_LABELS.get(
+            schedule.weekly_target_day,
+            schedule.weekly_target_day.title(),
+        )
+        return f"{day} {_format_time(schedule.weekly_target_time)}"
     if not schedule.daily_anchor_enabled:
         return "Off"
     return _format_time(schedule.daily_anchor_time)
@@ -394,7 +477,10 @@ def _window_status_label(
     *,
     now: datetime,
     stale: bool,
+    telemetry_error: str | None,
 ) -> str:
+    if telemetry_error and snapshot is None:
+        return "Error"
     if snapshot is None:
         return "Waiting"
     if stale:
@@ -417,7 +503,10 @@ def _window_status_class(
     used_percent: float | None,
     *,
     stale: bool,
+    telemetry_error: str | None,
 ) -> str:
+    if telemetry_error and snapshot is None:
+        return "error"
     if snapshot is None:
         return "waiting"
     if stale:
@@ -433,7 +522,13 @@ def _window_status_class(
     return "ready"
 
 
-def _snapshot_status_label(snapshot: UsageSnapshot | None, stale: bool) -> str:
+def _snapshot_status_label(
+    snapshot: UsageSnapshot | None,
+    stale: bool,
+    telemetry_error: str | None,
+) -> str:
+    if telemetry_error and snapshot is None:
+        return "Telemetry error"
     if snapshot is None:
         return "No telemetry"
     if stale:
@@ -441,7 +536,13 @@ def _snapshot_status_label(snapshot: UsageSnapshot | None, stale: bool) -> str:
     return snapshot.parser_status.title()
 
 
-def _snapshot_status_class(snapshot: UsageSnapshot | None, stale: bool) -> str:
+def _snapshot_status_class(
+    snapshot: UsageSnapshot | None,
+    stale: bool,
+    telemetry_error: str | None,
+) -> str:
+    if telemetry_error and snapshot is None:
+        return "error"
     if snapshot is None:
         return "waiting"
     if stale:
@@ -478,6 +579,24 @@ def _percent_label(value: float | None) -> str:
     if value is None:
         return "-"
     return f"{value:.1f}%"
+
+
+def _captured_label(
+    snapshot: UsageSnapshot | None,
+    telemetry_error: str | None,
+    timezone: ZoneInfo,
+) -> str:
+    if snapshot is None and telemetry_error:
+        return "Refresh failed"
+    if snapshot is None:
+        return "Waiting for telemetry"
+    return _format_datetime(snapshot.captured_at, timezone)
+
+
+def _remaining_percent(value: float | None) -> float | None:
+    if value is None:
+        return None
+    return max(0.0, min(100.0, 100.0 - value))
 
 
 def format_local_datetime(value: datetime | None, timezone_name: str) -> str:

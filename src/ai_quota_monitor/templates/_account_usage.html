@@ -26,24 +26,27 @@
     {% for window in account_view.windows %}
     <div class="usage-window usage-window--{{ window.status_class }}">
       <div class="usage-window__heading">
-        <span>{{ window.label }}</span>
+        <span>{{ window.short_label }}</span>
         <small>{{ window.status_label }}</small>
       </div>
-      <strong>{{ window.used_percent_label }}</strong>
+      <strong>{{ window.remaining_percent_label }}</strong>
       <div class="usage-meter" aria-hidden="true">
-        <span style="width: {{ window.used_percent_value or 0 }}%"></span>
+        <span style="width: {{ window.remaining_percent_value or 0 }}%"></span>
       </div>
       <div class="usage-window__facts">
-        <span>Configured: {{ window.configured_short_label }} / Next: {{ window.next_label }}</span>
+        <span>Reset {{ window.next_label }}</span>
+        <span>Anchor {{ window.configured_short_label }}</span>
       </div>
-      {% if window.drift_label %}
-      <small>{{ window.drift_label }}</small>
-      {% endif %}
     </div>
     {% endfor %}
   </div>
+  {% if account_view.telemetry_error %}
+  <p class="usage-callout usage-callout--error">
+    Cannot read Codex usage: {{ account_view.telemetry_error }}
+  </p>
+  {% endif %}
   <p class="usage-meta">
-    {{ "Last telemetry " ~ account_view.captured_label if account_view.has_snapshot else "No telemetry yet" }}
+    {{ "Last telemetry " ~ account_view.captured_label if account_view.has_snapshot else account_view.captured_label }}
     <span class="usage-status usage-status--{{ account_view.snapshot_status_class }}">
       {{ account_view.snapshot_status_label }}
     </span>

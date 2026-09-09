@@ -8,6 +8,7 @@ import threading
 import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from ai_quota_monitor.models import Account
@@ -36,13 +37,13 @@ class CodexAppServerClient:
         self,
         account: Account,
         *,
-        command: Sequence[str] = ("codex",),
+        command: Sequence[str] | None = None,
         process_factory: ProcessFactory = subprocess.Popen,
         notification_handler: NotificationHandler | None = None,
         timeout_seconds: float = 15,
     ) -> None:
         self._account = account
-        self._command = tuple(command)
+        self._command = tuple(command) if command is not None else None
         self._process_factory = process_factory
         self._notification_handler = notification_handler
         self._timeout_seconds = timeout_seconds
@@ -66,7 +67,9 @@ class CodexAppServerClient:
         _, workspace_path = codex_runtime_paths(self._account)
         env = os.environ.copy()
         env.update(codex_env_for_account(self._account))
-        args = [*self._command, "app-server", "--listen", "stdio://"]
+        command, path_dirs = _resolve_codex_command(self._command)
+        _prepend_path_dirs(env, path_dirs)
+        args = [*command, "app-server", "--listen", "stdio://"]
         self._process = self._process_factory(
             args,
             stdin=subprocess.PIPE,
@@ -210,3 +213,51 @@ class CodexAppServerClient:
         except Exception:
             return ""
         return " ".join(value.split())[-1000:]
+
+
+def _resolve_codex_command(
+    command: tuple[str, ...] | None,
+) -> tuple[tuple[str, ...], tuple[Path, ...]]:
+    if command is not None:
+        return command, ()
+
+    try:
+        from codex_cli_bin import bundled_codex_path, bundled_path_dir
+    except ImportError:
+        return ("codex",), ()
+
+    path_dirs: tuple[Path, ...] = ()
+    path_dir = bundled_path_dir()
+    if path_dir is not None:
+        path_dirs = (path_dir,)
+    return (str(bundled_codex_path()),), path_dirs
+
+
+def _prepend_path_dirs(env: dict[str, str], path_dirs: tuple[Path, ...]) -> None:
+    if not path_dirs:
+        return
+
+    path_key = _path_env_key(env)
+    if os.name == "nt":
+        for key in list(env):
+            if key.upper() == "PATH" and key != path_key:
+                env.pop(key)
+
+    path_values = [str(path_dir) for path_dir in path_dirs]
+    current = env.get(path_key, "")
+    existing = [
+        entry
+        for entry in current.split(os.pathsep)
+        if entry and entry not in path_values
+    ]
+    env[path_key] = os.pathsep.join([*path_values, *existing])
+
+
+def _path_env_key(env: dict[str, str]) -> str:
+    if os.name != "nt":
+        return "PATH"
+
+    matching = [key for key in env if key.upper() == "PATH"]
+    if "Path" in matching:
+        return "Path"
+    return matching[-1] if matching else "PATH"
