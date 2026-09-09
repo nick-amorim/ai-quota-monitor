@@ -11,7 +11,7 @@
     <nav class="monitor-links" aria-label="Monitor accounts">
       <a href="/monitor">All</a>
       {% for account in monitor_view.accounts %}
-      <a href="/monitor/{{ account.slug }}">{{ account.slug }}</a>
+      <a href="/monitor/{{ account.slug }}">{{ account.display_label }}</a>
       {% endfor %}
     </nav>
   </header>
@@ -47,9 +47,7 @@
             <span style="width: {{ window.used_percent_value or 0 }}%"></span>
           </div>
           <div class="monitor-window__meta">
-            <span title="{{ window.reset_source_label }} reset: {{ window.observed_label if window.reset_source_label == 'Observed' else window.expected_label }}">
-              {{ window.reset_source_short_label }} {{ window.reset_time_label }}
-            </span>
+            <span>{{ window.reset_source_short_label }} {{ window.reset_time_label }}</span>
             {% if window.drift_label %}
             <span title="{{ window.drift_label }}">{{ window.drift_label.replace("Weekly drift ", "") }}</span>
             {% endif %}

@@ -28,25 +28,6 @@
     </div>
   </div>
 
-  <dl class="status-grid">
-    <div>
-      <dt>Application</dt>
-      <dd>Online</dd>
-    </div>
-    <div>
-      <dt>Database</dt>
-      <dd>Initialized</dd>
-    </div>
-    <div>
-      <dt>Timezone</dt>
-      <dd>{{ timezone }}</dd>
-    </div>
-    <div>
-      <dt>Scheduler</dt>
-      <dd>{{ "Running" if scheduler_running else "Stopped" }}</dd>
-    </div>
-  </dl>
-
   {% include "_account_grid.html" %}
 
   <div class="dashboard-secondary">
@@ -74,13 +55,13 @@
           <tbody>
             {% for run in anchor_runs %}
             <tr>
-              <td>{{ (run.account.account_display or run.account.name) if run.account else "Unknown" }}</td>
+              <td>{{ account_label(run.account) }}</td>
               <td>
                 <span class="anchor-status anchor-status--{{ run.status }}">
                   {{ run.status | title }}
                 </span>
               </td>
-              <td>{{ run.started_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+              <td>{{ format_datetime(run.started_at) }}</td>
               <td>{{ (run.duration_ms ~ " ms") if run.duration_ms is not none else "-" }}</td>
               <td>
                 {% if run.error_message %}
@@ -186,8 +167,8 @@
         {% for account in accounts %}
         <section class="settings-panel" aria-labelledby="schedule-settings-title-{{ account.id }}">
           <div>
-            <p class="eyebrow">{{ account.slug }}</p>
-            <h3 id="schedule-settings-title-{{ account.id }}">{{ account.name }} schedule</h3>
+            <p class="eyebrow">Schedule</p>
+            <h3 id="schedule-settings-title-{{ account.id }}">{{ account_label(account) }}</h3>
           </div>
           <form method="post" action="/accounts/{{ account.id }}/schedule" class="schedule-form">
             <label class="check-row">

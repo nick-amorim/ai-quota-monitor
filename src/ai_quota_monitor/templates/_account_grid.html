@@ -9,14 +9,12 @@
   {% set account_view = account_views.get(account.id) %}
   {% set login = login_attempts.get(account.id) %}
   {% set latest_anchor = latest_anchor_by_account.get(account.id) %}
-  {% set account_label = account.account_display or account.name %}
   <article class="account-panel">
     <header class="account-panel__header">
       <div class="account-identity">
-        <p class="eyebrow">{{ account.slug }}</p>
-        <h3>{{ account_label }}</h3>
-        {% if account.account_display %}
-        <p>{{ account.name }}{% if account.plan_type %} / {{ account.plan_type }}{% endif %}</p>
+        <h3>{{ account_view.display_label if account_view else "Account not logged in" }}</h3>
+        {% if account_view and account_view.secondary_label %}
+        <p>{{ account_view.secondary_label }}</p>
         {% endif %}
       </div>
       <div class="state-stack">
@@ -28,7 +26,7 @@
     </header>
 
     {% if login %}
-    <section class="login-panel" aria-label="Device login for {{ account.name }}">
+    <section class="login-panel" aria-label="Device login for {{ account_view.display_label if account_view else 'Account not logged in' }}">
       <div>
         <span>Device code</span>
         <strong>{{ login.user_code }}</strong>
@@ -53,13 +51,13 @@
         </div>
       </dl>
 
-      <section class="anchor-feedback" aria-label="Latest anchor for {{ account.name }}">
+      <section class="anchor-feedback" aria-label="Latest anchor for {{ account_view.display_label if account_view else 'Account not logged in' }}">
         <span>Last anchor</span>
         {% if latest_anchor %}
         <strong>{{ latest_anchor.status | title }}</strong>
         <small>
           {% if latest_anchor.completed_at %}
-          {{ latest_anchor.completed_at.strftime("%H:%M:%S") }}
+          {{ format_time(latest_anchor.completed_at) }}
           {% else %}
           Running
           {% endif %}
@@ -72,7 +70,7 @@
       </section>
     </div>
 
-    <div class="account-actions-row" aria-label="Actions for {{ account.name }}">
+    <div class="account-actions-row" aria-label="Actions for {{ account_view.display_label if account_view else 'Account not logged in' }}">
       <form method="post" action="/accounts/{{ account.id }}/auth/device-login">
         <button type="submit">Login</button>
       </form>

@@ -173,8 +173,9 @@ def test_dashboard_shell_renders(tmp_path):
     assert '<html lang="en" class="dark">' in response.text
     assert "ai-quota-monitor" in response.text
     assert "Accounts and schedules" in response.text
-    assert "Account A" in response.text
-    assert "Account B" in response.text
+    assert "Account not logged in" in response.text
+    assert "Account A" not in response.text
+    assert "Account B" not in response.text
     assert "Login" in response.text
     assert "Check" in response.text
     assert "Anchor" in response.text
@@ -192,7 +193,7 @@ def test_dashboard_shell_renders(tmp_path):
     assert 'hx-get="/partials/scheduler"' in response.text
     assert 'hx-get="/partials/events/recent"' in response.text
     assert "No anchor runs yet." in response.text
-    assert "America/Recife" in response.text
+    assert "Application" not in response.text
 
 
 def test_database_file_is_created(tmp_path):
@@ -346,9 +347,9 @@ def test_usage_refresh_route_records_quota_snapshot(tmp_path):
 
     assert response.status_code == 303
     assert "Quota telemetry" in dashboard.text
-    assert "Observed" in dashboard.text
-    assert "Expected" in dashboard.text
     assert "Configured" in dashboard.text
+    assert "Next:" in dashboard.text
+    assert "+ 5h (" not in dashboard.text
     assert "Weekly drift" in dashboard.text
     assert "72" in dashboard.text
     assert "43" in dashboard.text
@@ -423,7 +424,8 @@ def test_monitor_route_renders_compact_quota_view(tmp_path):
     assert ">5h<" in response.text
     assert ">7d<" in response.text
     assert "timeline-panel" not in response.text
-    assert "Account A" in response.text
+    assert "Account not logged in" in response.text
+    assert "Account A" not in response.text
     assert "5-hour" in response.text
     assert "Weekly drift" in response.text
 
@@ -439,9 +441,11 @@ def test_account_monitor_and_partial_filter_to_slug(tmp_path):
     assert response.status_code == 200
     assert partial.status_code == 200
     assert missing.status_code == 404
-    assert "Account A" in response.text
+    assert "Account not logged in" in response.text
+    assert "Account A" not in response.text
     assert "Account B" not in response.text
-    assert "Account A" in partial.text
+    assert "Account not logged in" in partial.text
+    assert "Account A" not in partial.text
     assert "Account B" not in partial.text
 
 

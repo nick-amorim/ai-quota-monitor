@@ -169,4 +169,13 @@ The frontend uses server-rendered partials:
 
 The dashboard is a dark-first operational interface with an optional persisted light mode. The Settings drawer holds less-frequent controls so the main dashboard stays focused.
 
+Visible account labels use the Codex account email when available. Until an account is authenticated, the UI uses `Account not logged in` instead of internal seed labels such as Account A or Account B.
+
+All frontend timestamps are formatted in the configured application timezone. SQLite may return UTC datetimes without timezone metadata, so display formatters treat naive database values as UTC before converting them to the local display timezone.
+
+Dashboard quota windows intentionally use compact labels:
+
+- 5-hour: `Configured: HH:MM / Next: HH:MM`
+- weekly: `Configured: Weekday HH:MM / Next: Day HH:MM`
+
 The monitor view is dark-only and intentionally dense. It hides the normal app bar, omits the timeline, and uses compact account labels, status dots, reset chips, and quota bars for a 3.7-inch Raspberry Pi display.

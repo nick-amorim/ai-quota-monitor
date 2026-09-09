@@ -6,7 +6,6 @@ from zoneinfo import ZoneInfo
 
 from ai_quota_monitor.config import Settings
 from ai_quota_monitor.models import Account, UsageSnapshot
-from ai_quota_monitor.services.accounts import WEEKDAYS
 from ai_quota_monitor.services.reset_times import expected_reset_times
 from ai_quota_monitor.services.scheduler import ScheduledAnchorJob
 
@@ -19,8 +18,10 @@ class QuotaWindowView:
     used_percent_value: float | None
     used_percent_label: str
     configured_label: str
+    configured_short_label: str
     expected_label: str
     observed_label: str
+    next_label: str
     reset_time_label: str
     reset_source_short_label: str
     reset_source_label: str
@@ -35,6 +36,7 @@ class AccountMonitorView:
     name: str
     slug: str
     display_label: str
+    secondary_label: str | None
     enabled_label: str
     auth_label: str
     account_display: str | None
@@ -114,11 +116,12 @@ def build_current_day_timeline(
     day_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
     day_end = day_start + timedelta(days=1)
     entries: list[TimelineEntry] = []
+    account_labels = {account.id: _display_label(account) for account in accounts}
 
     for job in scheduled_jobs:
         entries.extend(
             _timeline_entry(
-                account_name=job.account_name,
+                account_name=account_labels.get(job.account_id, "Account not logged in"),
                 label=f"{job.kind.title()} anchor",
                 at=job.next_run_at,
                 timezone=timezone,
@@ -129,6 +132,7 @@ def build_current_day_timeline(
         )
 
     for account in accounts:
+        account_name = account_labels.get(account.id, "Account not logged in")
         expected = expected_reset_times(account, now)
         snapshot = usage_by_account.get(account.id)
         expected_five = (
@@ -154,7 +158,7 @@ def build_current_day_timeline(
 
         entries.extend(
             _timeline_entry(
-                account_name=account.name,
+                account_name=account_name,
                 label="Expected 5h reset",
                 at=expected_five,
                 timezone=timezone,
@@ -165,7 +169,7 @@ def build_current_day_timeline(
         )
         entries.extend(
             _timeline_entry(
-                account_name=account.name,
+                account_name=account_name,
                 label="Observed 5h reset",
                 at=observed_five,
                 timezone=timezone,
@@ -176,7 +180,7 @@ def build_current_day_timeline(
         )
         entries.extend(
             _timeline_entry(
-                account_name=account.name,
+                account_name=account_name,
                 label="Expected weekly reset",
                 at=expected_weekly,
                 timezone=timezone,
@@ -187,7 +191,7 @@ def build_current_day_timeline(
         )
         entries.extend(
             _timeline_entry(
-                account_name=account.name,
+                account_name=account_name,
                 label="Observed weekly reset",
                 at=observed_weekly,
                 timezone=timezone,
@@ -222,7 +226,8 @@ def _account_view(
         account_id=account.id,
         name=account.name,
         slug=account.slug,
-        display_label=account.account_display or account.name,
+        display_label=_display_label(account),
+        secondary_label=account.plan_type,
         enabled_label="Enabled" if account.enabled else "Paused",
         auth_label=account.auth_status.replace("_", " ").title(),
         account_display=account.account_display,
@@ -300,8 +305,10 @@ def _window_view(
         used_percent_value=used_percent,
         used_percent_label=_percent_label(used_percent),
         configured_label=_configured_label(account, key),
+        configured_short_label=_configured_short_label(account, key),
         expected_label=_format_datetime(expected_reset_at, timezone),
         observed_label=_format_datetime(observed_reset_at, timezone),
+        next_label=_next_label(reset_at, timezone, key),
         reset_time_label=_format_clock(reset_at, timezone),
         reset_source_short_label="obs" if observed_reset_at else "exp",
         reset_source_label="Observed" if observed_reset_at else "Expected",
@@ -358,20 +365,26 @@ def _configured_label(account: Account, key: str) -> str:
     if key == "weekly":
         return (
             f"{schedule.weekly_target_day.title()} "
-            f"{_format_time(schedule.weekly_target_time)} {schedule.timezone}"
+            f"{_format_time(schedule.weekly_target_time)}"
         )
     if not schedule.daily_anchor_enabled:
         return "Daily anchor off"
-    active_days = [
-        weekday[:3].title()
-        for weekday in WEEKDAYS
-        if getattr(schedule, f"{weekday}_enabled")
-    ]
-    days_label = ", ".join(active_days) if active_days else "No active days"
-    return (
-        f"{_format_time(schedule.daily_anchor_time)} + 5h "
-        f"({days_label}, {schedule.timezone})"
-    )
+    return f"{_format_time(schedule.daily_anchor_time)} + 5h"
+
+
+def _display_label(account: Account) -> str:
+    return account.account_display or "Account not logged in"
+
+
+def _configured_short_label(account: Account, key: str) -> str:
+    schedule = account.schedule
+    if schedule is None:
+        return "-"
+    if key == "weekly":
+        return f"{schedule.weekly_target_day.title()} {_format_time(schedule.weekly_target_time)}"
+    if not schedule.daily_anchor_enabled:
+        return "Off"
+    return _format_time(schedule.daily_anchor_time)
 
 
 def _window_status_label(
@@ -467,6 +480,14 @@ def _percent_label(value: float | None) -> str:
     return f"{value:.1f}%"
 
 
+def format_local_datetime(value: datetime | None, timezone_name: str) -> str:
+    return _format_datetime(value, _timezone(timezone_name))
+
+
+def format_local_time(value: datetime | None, timezone_name: str) -> str:
+    return _format_clock(value, _timezone(timezone_name))
+
+
 def _format_datetime(value: datetime | None, timezone: ZoneInfo) -> str:
     if value is None:
         return "Unknown"
@@ -481,6 +502,15 @@ def _format_clock(value: datetime | None, timezone: ZoneInfo) -> str:
     if value is None:
         return "--:--"
     return _as_aware_utc(value).astimezone(timezone).strftime("%H:%M")
+
+
+def _next_label(value: datetime | None, timezone: ZoneInfo, key: str) -> str:
+    if value is None:
+        return "--:--"
+    local_value = _as_aware_utc(value).astimezone(timezone)
+    if key == "weekly":
+        return local_value.strftime("%a %H:%M")
+    return local_value.strftime("%H:%M")
 
 
 def _timezone(value: str) -> ZoneInfo:

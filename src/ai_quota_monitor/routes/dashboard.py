@@ -18,7 +18,12 @@ from ai_quota_monitor.services.accounts import (
 )
 from ai_quota_monitor.services.anchors import get_app_setting, update_app_setting
 from ai_quota_monitor.services.events import EventFilters, list_events, recent_events
-from ai_quota_monitor.services.monitor import MonitorView, build_monitor_view
+from ai_quota_monitor.services.monitor import (
+    MonitorView,
+    build_monitor_view,
+    format_local_datetime,
+    format_local_time,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +67,8 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 "scheduled_jobs": scheduled_jobs,
                 "system_info": system_info,
                 "events": recent_events(session_factory, limit=8),
+                "account_labels_by_id": _account_labels_by_id(accounts),
+                **_template_helpers(request),
             },
         )
 
@@ -84,6 +91,8 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 "usage_by_account": usage_by_account,
                 "account_views": monitor_view.account_map,
                 "latest_anchor_by_account": _latest_anchor_by_account(anchor_runs),
+                "account_labels_by_id": _account_labels_by_id(accounts),
+                **_template_helpers(request),
             },
         )
 
@@ -122,6 +131,7 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 "selected_account_id": selected_account_id,
                 "selected_level": selected_level,
                 "selected_category": selected_category,
+                **_template_helpers(request),
             },
         )
 
@@ -203,16 +213,22 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 "account": account,
                 "usage_by_account": usage_by_account,
                 "account_views": monitor_view.account_map,
+                **_template_helpers(request),
             },
         )
 
     @router.get("/partials/scheduler", response_class=HTMLResponse)
     async def scheduler_partial(request: Request) -> HTMLResponse:
+        session_factory = request.app.state.session_factory
+        with session_factory() as session:
+            accounts = list_accounts(session)
         return templates.TemplateResponse(
             request,
             "_scheduled_jobs.html",
             {
                 "scheduled_jobs": request.app.state.quota_scheduler.next_runs(),
+                "account_labels_by_id": _account_labels_by_id(accounts),
+                **_template_helpers(request),
             },
         )
 
@@ -224,6 +240,7 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
             "_recent_events.html",
             {
                 "events": recent_events(session_factory, limit=8),
+                **_template_helpers(request),
             },
         )
 
@@ -446,3 +463,22 @@ def _latest_anchor_by_account(anchor_runs) -> dict[int, object]:
         if run.account_id not in latest:
             latest[run.account_id] = run
     return latest
+
+
+def _template_helpers(request: Request) -> dict[str, object]:
+    timezone = request.app.state.settings.timezone
+    return {
+        "format_datetime": lambda value: format_local_datetime(value, timezone),
+        "format_time": lambda value: format_local_time(value, timezone),
+        "account_label": _account_label,
+    }
+
+
+def _account_label(account) -> str:
+    if account is None:
+        return "-"
+    return account.account_display or "Account not logged in"
+
+
+def _account_labels_by_id(accounts) -> dict[int, str]:
+    return {account.id: _account_label(account) for account in accounts}

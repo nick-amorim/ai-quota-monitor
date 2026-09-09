@@ -11,7 +11,11 @@ from ai_quota_monitor.database import (
 from ai_quota_monitor.migrations import run_migrations
 from ai_quota_monitor.models import UsageSnapshot
 from ai_quota_monitor.services.accounts import list_accounts, seed_defaults
-from ai_quota_monitor.services.monitor import build_monitor_view
+from ai_quota_monitor.services.monitor import (
+    build_monitor_view,
+    format_local_datetime,
+    format_local_time,
+)
 from ai_quota_monitor.services.scheduler import ScheduledAnchorJob
 
 
@@ -73,12 +77,15 @@ def test_monitor_view_reports_weekly_drift_and_today_timeline(tmp_path):
         five_hour, weekly = account.windows
 
         assert view.generated_clock_label == "01:00"
-        assert account.display_label == "Account A"
+        assert account.display_label == "Account not logged in"
         assert five_hour.short_label == "5h"
+        assert five_hour.configured_short_label == "05:00"
         assert five_hour.reset_time_label == "10:00"
         assert five_hour.reset_source_short_label == "obs"
         assert weekly.short_label == "7d"
-        assert five_hour.configured_label.startswith("05:00 + 5h")
+        assert weekly.configured_short_label == "Monday 05:00"
+        assert weekly.next_label == "Mon 06:00"
+        assert five_hour.configured_label == "05:00 + 5h"
         assert five_hour.observed_label == "2026-01-05 10:00:00"
         assert weekly.drift_label == "Weekly drift 60 min late"
         assert any(entry.label == "Daily anchor" for entry in view.timeline)
@@ -114,3 +121,10 @@ def test_monitor_view_marks_stale_snapshots(tmp_path):
         assert view.account_map[1].windows[0].status_label == "Stale"
     finally:
         engine.dispose()
+
+
+def test_local_time_formatters_treat_naive_database_values_as_utc():
+    value = datetime(2026, 9, 9, 11, 46, 37)
+
+    assert format_local_time(value, "America/Recife") == "08:46"
+    assert format_local_datetime(value, "America/Recife") == "2026-09-09 08:46:37"

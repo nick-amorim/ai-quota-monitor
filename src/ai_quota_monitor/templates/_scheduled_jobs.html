@@ -19,16 +19,14 @@
           <th scope="col">Account</th>
           <th scope="col">Job</th>
           <th scope="col">Next run</th>
-          <th scope="col">Timezone</th>
         </tr>
       </thead>
       <tbody>
         {% for job in scheduled_jobs %}
         <tr>
-          <td>{{ job.account_name }}</td>
+          <td>{{ account_labels_by_id.get(job.account_id, "Account not logged in") }}</td>
           <td>{{ job.kind | title }}</td>
-          <td>{{ job.next_run_at.strftime("%Y-%m-%d %H:%M:%S") if job.next_run_at else "-" }}</td>
-          <td>{{ job.timezone }}</td>
+          <td>{{ format_datetime(job.next_run_at) if job.next_run_at else "-" }}</td>
         </tr>
         {% endfor %}
       </tbody>

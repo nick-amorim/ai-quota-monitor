@@ -3,7 +3,7 @@
 <section
   id="account-{{ account.id }}-usage"
   class="usage-panel"
-  aria-label="Quota telemetry for {{ account.name }}"
+  aria-label="Quota telemetry for {{ account_view.display_label if account_view else 'Account not logged in' }}"
   hx-get="/partials/accounts/{{ account.id }}/usage"
   hx-trigger="every 30s"
   hx-swap="outerHTML"
@@ -34,9 +34,7 @@
         <span style="width: {{ window.used_percent_value or 0 }}%"></span>
       </div>
       <div class="usage-window__facts">
-        <span title="{{ window.configured_label }}">Configured {{ window.configured_label }}</span>
-        <span title="{{ window.expected_label }}">Expected {{ window.expected_label }}</span>
-        <span title="{{ window.observed_label }}">{{ window.reset_source_label }} {{ window.reset_time_label }}</span>
+        <span>Configured: {{ window.configured_short_label }} / Next: {{ window.next_label }}</span>
       </div>
       {% if window.drift_label %}
       <small>{{ window.drift_label }}</small>

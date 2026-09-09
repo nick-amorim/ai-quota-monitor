@@ -18,9 +18,9 @@
             {{ event.level | title }}
           </span>
         </td>
-        <td>{{ (event.account.account_display or event.account.name) if event.account else "-" }}</td>
+        <td>{{ account_label(event.account) }}</td>
         <td>{{ event.category }}</td>
-        <td>{{ event.created_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+        <td>{{ format_datetime(event.created_at) }}</td>
         <td>
           {% if event.payload_json %}
           <details class="event-details">
