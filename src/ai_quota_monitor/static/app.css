@@ -1268,6 +1268,12 @@ main {
   min-width: 0;
 }
 
+.anchor-settings-form label small {
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
 .settings-panel {
   display: grid;
   gap: 0.9rem;

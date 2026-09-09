@@ -34,16 +34,20 @@ Each account has independent Codex runtime state. Account authentication is chec
 ## Authentication Flow
 
 1. Open `/`.
-2. Use `Start device login` for one account.
+2. Use `Login` for one account.
 3. Complete the Codex ChatGPT device-code flow.
-4. Use `Check status` to refresh account metadata.
+4. Wait for the account card to update automatically, or use `Refresh auth` to force an account metadata check.
 5. Repeat for the second account.
 
 If both configured accounts resolve to the same Codex account identity, the later refreshed account is marked as `duplicate_account`.
 
 ## Quota Telemetry
 
-Connected accounts are refreshed automatically every `AI_QUOTA_MONITOR_USAGE_POLL_INTERVAL_MINUTES` minutes. Use `Refresh usage` when you want an immediate manual refresh.
+Connected accounts are refreshed automatically every `AI_QUOTA_MONITOR_USAGE_POLL_INTERVAL_MINUTES` minutes. This background usage polling is configurable from the global settings drawer and refreshes connected, enabled accounts only.
+
+The dashboard and compact monitor also refresh their visible HTML panels on a separate browser-only timer. That interval is controlled by `AI_QUOTA_MONITOR_DASHBOARD_REFRESH_INTERVAL_SECONDS` or the global settings drawer. It does not fetch quota telemetry by itself; it only repaints the UI from the latest stored state.
+
+Use `Refresh now` or `Refresh usage now` when you want an immediate manual quota read instead of waiting for the next automatic usage polling run.
 
 The dashboard and compact monitor display remaining quota percentage, matching the Codex usage menu. The app stores Codex's raw `usedPercent` values and derives remaining quota as `100 - usedPercent` for display.
 
@@ -66,7 +70,7 @@ The default anchor prompt is:
 Reply only with OK.
 ```
 
-The prompt is editable from the Settings drawer. Manual anchors use account-scoped Codex homes/workspaces, read-only sandboxing, and deny-all approvals.
+The prompt is editable from the global settings drawer. Manual anchors use account-scoped Codex homes/workspaces, read-only sandboxing, and deny-all approvals.
 
 ## Scheduled Anchors
 
@@ -77,7 +81,7 @@ The scheduler creates:
 
 The configured daily time is the first wake of the day. Later same-day wakes are derived every 5 hours. For example, `05:00` creates `05:00`, `10:00`, `15:00`, and `20:00`; `09:00` creates `09:00`, `14:00`, and `19:00`.
 
-Schedule edits are saved from the Settings drawer and reloaded without restarting the app. Account cards show the enabled daily weekdays, derived daily wake times, weekly target, and next scheduled wake call.
+Schedule edits are saved from each account card's `Settings` button and reloaded without restarting the app. Account cards show the enabled daily weekdays, derived daily wake times, weekly target, and next scheduled wake call.
 
 Smart scheduled-anchor validation:
 
@@ -102,7 +106,7 @@ http://127.0.0.1:8080/monitor/account-a
 http://127.0.0.1:8080/monitor/account-b
 ```
 
-The monitor is dark-only and optimized for small always-on screens. It refreshes every 15 seconds and shows:
+The monitor is dark-only and optimized for small always-on screens. It uses the dashboard refresh interval and shows:
 
 - account email when known;
 - 5-hour and weekly remaining quota percentages;

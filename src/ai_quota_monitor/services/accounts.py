@@ -28,6 +28,7 @@ DEFAULT_APP_SETTINGS = {
     "missed_anchor_policy": "run_if_within_grace",
     "missed_anchor_grace_minutes": "30",
     "history_retention_days": "90",
+    "dashboard_refresh_interval_seconds": "10",
 }
 
 
@@ -59,6 +60,9 @@ def default_app_settings(settings: Settings) -> dict[str, str]:
         "missed_anchor_policy": settings.missed_anchor_policy,
         "missed_anchor_grace_minutes": str(settings.missed_anchor_grace_minutes),
         "history_retention_days": str(settings.history_retention_days),
+        "dashboard_refresh_interval_seconds": str(
+            settings.dashboard_refresh_interval_seconds
+        ),
     }
 
 

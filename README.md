@@ -102,6 +102,7 @@ Copy `.env.example` values into your deployment environment. Important settings:
 | `AI_QUOTA_MONITOR_DATABASE_URL` | SQLite database URL |
 | `AI_QUOTA_MONITOR_DATA_DIR` | Runtime state directory |
 | `AI_QUOTA_MONITOR_LOG_FILE` | Rotating app log path |
+| `AI_QUOTA_MONITOR_DASHBOARD_REFRESH_INTERVAL_SECONDS` | Browser-only dashboard and monitor refresh interval |
 | `AI_QUOTA_MONITOR_TIMEZONE` | Default display/schedule timezone |
 | `AI_QUOTA_MONITOR_ENABLE_SCHEDULER` | Enable daily/weekly anchor jobs |
 | `AI_QUOTA_MONITOR_ENABLE_APP_SERVER_NOTIFICATIONS` | Enable live quota update listeners |

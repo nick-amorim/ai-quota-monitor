@@ -156,7 +156,7 @@ Missed jobs use `AI_QUOTA_MONITOR_MISSED_ANCHOR_POLICY`:
 
 Smart scheduled anchors refresh telemetry before and after the anchor and record whether reset timing changed.
 
-The same APScheduler instance also owns the automatic telemetry poll job, `telemetry:refresh-all`. It runs every `AI_QUOTA_MONITOR_USAGE_POLL_INTERVAL_MINUTES` minutes and refreshes connected, enabled accounts only.
+The same APScheduler instance also owns the automatic telemetry poll job, `telemetry:refresh-all`. It refreshes connected, enabled accounts only. The interval defaults to `AI_QUOTA_MONITOR_USAGE_POLL_INTERVAL_MINUTES`, then uses the persisted `usage_poll_interval_minutes` app setting when the scheduler reloads.
 
 ## Partial Refreshes
 
@@ -173,9 +173,11 @@ The frontend uses server-rendered partials:
 
 `src/ai_quota_monitor/static/app.js` implements the subset of `hx-get`, `hx-trigger`, and `hx-swap` needed by these fragments.
 
+Partial refreshes are browser-only UI refreshes. They use the persisted `dashboard_refresh_interval_seconds` app setting, which defaults to `AI_QUOTA_MONITOR_DASHBOARD_REFRESH_INTERVAL_SECONDS`. This timer does not fetch fresh Codex quota telemetry; the scheduler telemetry job owns that.
+
 ## UI Notes
 
-The dashboard is a dark-first operational interface with an optional persisted light mode. The Settings drawer holds less-frequent controls so the main dashboard stays focused.
+The dashboard is a dark-first operational interface with an optional persisted light mode. The top gear opens global application settings only: deployment/update controls, dashboard refresh seconds, usage polling minutes, and the global anchor prompt. Each account card's `Settings` button opens that account's schedule controls.
 
 Visible account labels use the Codex account email when available. Until an account is authenticated, the UI uses `Account not logged in` instead of internal seed labels such as Account A or Account B.
 
