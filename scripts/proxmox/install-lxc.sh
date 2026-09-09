@@ -139,6 +139,33 @@ update_current_system() {
   "$INSTALL_DIR/.venv/bin/ai-quota-monitor-update" --yes --restart --deployment-mode proxmox
 }
 
+install_into_created_lxc() {
+  local raw_url="${REPO_URL%.git}/raw/${BRANCH}/scripts/proxmox/install-lxc.sh"
+  local attempt
+
+  for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+    printf 'Installing %s inside container %s (attempt %s/12)...\n' "$APP_NAME" "$CT_ID" "$attempt"
+    if pct exec "$CT_ID" -- bash -lc "
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y ca-certificates curl
+curl -fsSL '$raw_url' | AI_QUOTA_MONITOR_REPO_URL='$REPO_URL' AI_QUOTA_MONITOR_BRANCH='$BRANCH' bash -s -- --existing --yes
+"; then
+      return 0
+    fi
+
+    if [ "$attempt" -lt 12 ]; then
+      printf 'Container install attempt failed; waiting for the LXC network/package manager and retrying...\n' >&2
+      sleep 10
+    fi
+  done
+
+  printf 'Failed to install %s inside container %s.\n' "$APP_NAME" "$CT_ID" >&2
+  printf 'Enter the container with pct enter %s, then run the --existing installer manually.\n' "$CT_ID" >&2
+  exit 1
+}
+
 create_lxc() {
   require_root
   configure_advanced
@@ -172,7 +199,7 @@ create_lxc() {
     --features nesting=1 \
     --onboot 1
   pct start "$CT_ID"
-  pct exec "$CT_ID" -- bash -c "curl -fsSL ${REPO_URL%.*}/raw/${BRANCH}/scripts/proxmox/install-lxc.sh | bash -s -- --existing --yes"
+  install_into_created_lxc
   printf 'Container %s created for %s.\n' "$CT_ID" "$APP_NAME"
 }
 
