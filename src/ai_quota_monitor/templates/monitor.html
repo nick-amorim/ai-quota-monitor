@@ -2,14 +2,7 @@
 
 {% block content %}
 <section class="monitor-page" aria-labelledby="monitor-title">
-  <div class="monitor-title-row">
-    <div>
-      <p class="eyebrow">Compact display</p>
-      <h2 id="monitor-title">Quota monitor</h2>
-    </div>
-    <a href="/" class="secondary-link">Dashboard</a>
-  </div>
-
+  <h2 id="monitor-title" class="sr-only">Quota monitor</h2>
   {% include "_monitor_content.html" %}
 </section>
 {% endblock %}

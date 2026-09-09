@@ -409,6 +409,10 @@ def test_monitor_route_renders_compact_quota_view(tmp_path):
     assert "Quota monitor" in response.text
     assert 'class="monitor-body"' in response.text
     assert 'hx-get="/partials/monitor"' in response.text
+    assert "monitor-state-dot" in response.text
+    assert ">5h<" in response.text
+    assert ">7d<" in response.text
+    assert "timeline-panel" not in response.text
     assert "Account A" in response.text
     assert "5-hour" in response.text
     assert "Weekly drift" in response.text
