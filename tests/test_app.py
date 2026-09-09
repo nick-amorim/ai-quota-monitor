@@ -180,7 +180,7 @@ def test_dashboard_shell_renders(tmp_path):
     assert response.status_code == 200
     assert '<html lang="en" class="dark">' in response.text
     assert "ai-quota-monitor" in response.text
-    assert "Accounts and schedules" in response.text
+    assert "Quota window" in response.text
     assert "Account not logged in" in response.text
     assert "Account A" not in response.text
     assert "Account B" not in response.text
@@ -288,7 +288,7 @@ def test_auth_status_route_updates_account_metadata(tmp_path):
 
     assert response.status_code == 303
     assert "user@example.test" in dashboard.text
-    assert "<h3>user@example.test</h3>" in dashboard.text
+    assert 'title="user@example.test"' in dashboard.text
     assert "plus" in dashboard.text
 
 
@@ -436,7 +436,7 @@ def test_partial_routes_render_refreshable_sections(tmp_path):
     assert scheduler.status_code == 200
     assert "Scheduled anchors" in scheduler.text
     assert events.status_code == 200
-    assert "Recent events" in events.text
+    assert "Recent activity" in events.text
 
 
 def test_monitor_route_renders_compact_quota_view(tmp_path):

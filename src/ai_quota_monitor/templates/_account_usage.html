@@ -9,7 +9,7 @@
   hx-swap="outerHTML"
 >
   <div class="usage-panel__header">
-    <h4>Quota telemetry</h4>
+    <h3>Quota telemetry</h3>
     <form method="post" action="/accounts/{{ account.id }}/usage/refresh">
       <button
         type="submit"
@@ -24,20 +24,27 @@
   {% if account_view %}
   <div class="usage-grid">
     {% for window in account_view.windows %}
-    <div class="usage-window usage-window--{{ window.status_class }}">
+    <section class="usage-window usage-window--{{ window.status_class }}" aria-label="{{ window.label }} window {{ window.remaining_percent_label }} available">
       <div class="usage-window__heading">
-        <span>{{ window.short_label }}</span>
+        <span>{{ "5-hour window" if window.short_label == "5h" else "7-day window" }}</span>
         <small>{{ window.status_label }}</small>
       </div>
       <strong>{{ window.remaining_percent_label }}</strong>
-      <div class="usage-meter" aria-hidden="true">
+      <div
+        class="usage-meter"
+        role="progressbar"
+        aria-label="{{ window.label }} remaining quota"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        {% if window.remaining_percent_value is not none %}aria-valuenow="{{ window.remaining_percent_value }}"{% endif %}
+      >
         <span style="width: {{ window.remaining_percent_value or 0 }}%"></span>
       </div>
       <div class="usage-window__facts">
         <span>Reset {{ window.next_label }}</span>
         <span>Anchor {{ window.configured_short_label }}</span>
       </div>
-    </div>
+    </section>
     {% endfor %}
   </div>
   {% if account_view.telemetry_error %}

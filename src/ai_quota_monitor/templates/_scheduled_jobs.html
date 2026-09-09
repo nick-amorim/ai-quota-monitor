@@ -1,36 +1,31 @@
 <section
   id="scheduled-jobs"
-  class="history-panel"
+  class="ops-panel schedule-panel"
   aria-labelledby="scheduler-title"
   hx-get="/partials/scheduler"
   hx-trigger="every 30s"
   hx-swap="outerHTML"
 >
-  <div>
-    <p class="eyebrow">Automation</p>
-    <h3 id="scheduler-title">Scheduled anchors</h3>
+  <div class="section-heading">
+    <div>
+      <p class="eyebrow">Automation</p>
+      <h2 id="scheduler-title">Scheduled anchors</h2>
+    </div>
+    <span class="count-label">{{ scheduled_jobs | length }}</span>
   </div>
 
   {% if scheduled_jobs %}
-  <div class="history-table-wrap">
-    <table class="history-table">
-      <thead>
-        <tr>
-          <th scope="col">Account</th>
-          <th scope="col">Job</th>
-          <th scope="col">Next run</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for job in scheduled_jobs %}
-        <tr>
-          <td>{{ account_labels_by_id.get(job.account_id, "Account not logged in") }}</td>
-          <td>{{ job.kind | title }}</td>
-          <td>{{ format_datetime(job.next_run_at) if job.next_run_at else "-" }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+  <div class="activity-list">
+    {% for job in scheduled_jobs %}
+    <div class="activity-item">
+      <span class="status-dot status-dot--warning" aria-hidden="true"></span>
+      <div>
+        <strong>{{ job.kind | title }}</strong>
+        <span>{{ account_labels_by_id.get(job.account_id, "Account not logged in") }}</span>
+      </div>
+      <time>{{ format_datetime(job.next_run_at) if job.next_run_at else "-" }}</time>
+    </div>
+    {% endfor %}
   </div>
   {% else %}
   <p class="empty-state">No scheduled anchors are active.</p>

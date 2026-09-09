@@ -70,6 +70,7 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 "anchor_runs": anchor_runs,
                 "latest_anchor_by_account": _latest_anchor_by_account(anchor_runs),
                 "usage_by_account": usage_by_account,
+                "monitor_view": monitor_view,
                 "account_views": monitor_view.account_map,
                 "timeline": monitor_view.timeline,
                 "scheduler_running": request.app.state.quota_scheduler.running,

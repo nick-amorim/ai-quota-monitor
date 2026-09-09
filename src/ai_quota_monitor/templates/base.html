@@ -5,6 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="dark light">
     <title>{{ app_name }}</title>
+    <script>
+      (function () {
+        try {
+          var theme = window.localStorage.getItem("aiQuotaMonitorTheme") || "dark";
+          document.documentElement.className = theme === "light" ? "light" : "dark";
+        } catch (error) {
+          document.documentElement.className = "dark";
+        }
+      })();
+    </script>
     <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}">
     <script src="{{ url_for('static', path='/app.js') }}" defer></script>
   </head>
@@ -15,24 +25,34 @@
           <span class="brand-mark" aria-hidden="true">Q</span>
           <span class="brand-text">
             <span class="brand-title">{{ app_name }}</span>
-            <span class="brand-sub">Codex quota monitor</span>
+            <span class="brand-sub">self-hosted &middot; v{{ version }}</span>
           </span>
         </a>
 
         <nav class="header-nav" aria-label="Primary">
-          <a href="/">Dashboard</a>
-          <a href="/monitor">Monitor</a>
-          <a href="/history">History</a>
+          <a href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>Dashboard</a>
+          <a href="/history" {% if request.url.path.startswith("/history") %}aria-current="page"{% endif %}>Events</a>
+          <a href="/monitor" {% if request.url.path.startswith("/monitor") %}aria-current="page"{% endif %}>Monitor</a>
         </nav>
 
         <div class="appbar-actions">
-          <button class="icon-btn" type="button" data-theme-toggle aria-label="Toggle theme" title="Toggle theme">
-            <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17">
-              <path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 2v14a7 7 0 0 1 0-14Z" fill="currentColor"></path>
+          <button class="icon-btn" type="button" data-theme-toggle aria-label="Switch to light theme" title="Switch to light theme" aria-pressed="true">
+            <svg class="icon icon-sun" aria-hidden="true" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="4"></circle>
+              <path d="M12 2v2"></path>
+              <path d="M12 20v2"></path>
+              <path d="m4.93 4.93 1.41 1.41"></path>
+              <path d="m17.66 17.66 1.41 1.41"></path>
+              <path d="M2 12h2"></path>
+              <path d="M20 12h2"></path>
+              <path d="m6.34 17.66-1.41 1.41"></path>
+              <path d="m19.07 4.93-1.41 1.41"></path>
+            </svg>
+            <svg class="icon icon-moon" aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M12 3a6.8 6.8 0 0 0 8.9 8.9A9 9 0 1 1 12 3Z"></path>
             </svg>
           </button>
           {% block header_actions %}{% endblock %}
-          <span class="version">v{{ version }}</span>
         </div>
       </div>
     </header>

@@ -14,7 +14,8 @@
       {% for event in events %}
       <tr>
         <td>
-          <span class="event-level event-level--{{ event.level }}">
+          <span class="table-state table-state--{{ event.level }}">
+            <span class="status-dot status-dot--{{ 'success' if event.level == 'info' else ('warning' if event.level == 'warning' else 'error') }}" aria-hidden="true"></span>
             {{ event.level | title }}
           </span>
         </td>
