@@ -37,8 +37,42 @@ Run tests:
 
 ## Docker
 
+From the machine that will run Docker:
+
 ```bash
+git clone https://github.com/nick-amorim/ai-quota-monitor.git
+cd ai-quota-monitor
 docker compose up -d
+```
+
+Open the dashboard from the Docker host:
+
+```text
+http://localhost:8080
+```
+
+Open it from another device on the same network:
+
+```text
+http://<docker-host-ip>:8080
+```
+
+Useful pages:
+
+```text
+http://<docker-host-ip>:8080/          dashboard
+http://<docker-host-ip>:8080/monitor   compact monitor
+http://<docker-host-ip>:8080/history   event history
+```
+
+The app does not create a default dashboard username or password. Use the account `Login` buttons to connect each ChatGPT/Codex account with the device-code flow.
+
+Common Docker commands must be run from the cloned `ai-quota-monitor` directory:
+
+```bash
+docker compose logs -f
+docker compose restart
+docker compose down
 ```
 
 The container listens on port `8080` and stores persistent runtime state in the `ai-quota-monitor-data` volume mounted at `/var/lib/ai-quota-monitor`. Docker images include a build-time Codex CLI runtime check because quota telemetry reads `codex app-server`.
@@ -60,10 +94,43 @@ Create a new Proxmox LXC from a Proxmox host:
 bash <(curl -fsSL https://raw.githubusercontent.com/nick-amorim/ai-quota-monitor/main/scripts/proxmox/install-lxc.sh)
 ```
 
+After the installer finishes, open:
+
+```text
+http://<container-ip>:8080
+```
+
+Find the container IP from the Proxmox UI, or from the Proxmox host:
+
+```bash
+pct list
+pct exec <ct-id> -- hostname -I
+```
+
 Install into an existing Debian/Ubuntu LXC or VM:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/nick-amorim/ai-quota-monitor/main/scripts/proxmox/install-lxc.sh) --existing
+```
+
+For an existing LXC or VM, open:
+
+```text
+http://<lxc-or-vm-ip>:8080
+```
+
+There is no default dashboard login password. The app is intended for trusted local/LAN deployment, and ChatGPT/Codex accounts are connected from the dashboard with the `Login` button.
+
+The Proxmox installer also does not set an LXC root password. Manage the container from the Proxmox host with:
+
+```bash
+pct enter <ct-id>
+```
+
+If you want password-based root console/login inside the LXC, set one explicitly:
+
+```bash
+pct exec <ct-id> -- passwd
 ```
 
 Update an existing native/Proxmox install:
