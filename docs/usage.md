@@ -43,7 +43,9 @@ If both configured accounts resolve to the same Codex account identity, the late
 
 ## Quota Telemetry
 
-Use `Refresh usage` on the dashboard to refresh all account telemetry, or refresh a single account from its account panel.
+Connected accounts are refreshed automatically every `AI_QUOTA_MONITOR_USAGE_POLL_INTERVAL_MINUTES` minutes. Use `Refresh usage` when you want an immediate manual refresh.
+
+The dashboard and compact monitor display remaining quota percentage, matching the Codex usage menu. The app stores Codex's raw `usedPercent` values and derives remaining quota as `100 - usedPercent` for display.
 
 The app stores:
 
@@ -70,10 +72,12 @@ The prompt is editable from the Settings drawer. Manual anchors use account-scop
 
 The scheduler creates:
 
-- one daily anchor job per enabled account when daily anchors are enabled;
+- one same-day 5-hour cadence of daily anchor jobs per enabled account when daily anchors are enabled;
 - one weekly target anchor job per enabled account.
 
-Schedule edits are saved from the Settings drawer and reloaded without restarting the app.
+The configured daily time is the first wake of the day. Later same-day wakes are derived every 5 hours. For example, `05:00` creates `05:00`, `10:00`, `15:00`, and `20:00`; `09:00` creates `09:00`, `14:00`, and `19:00`.
+
+Schedule edits are saved from the Settings drawer and reloaded without restarting the app. Account cards show the enabled daily weekdays, derived daily wake times, weekly target, and next scheduled wake call.
 
 Smart scheduled-anchor validation:
 
@@ -101,7 +105,7 @@ http://127.0.0.1:8080/monitor/account-b
 The monitor is dark-only and optimized for small always-on screens. It refreshes every 15 seconds and shows:
 
 - account email when known;
-- 5-hour and weekly quota percentages;
+- 5-hour and weekly remaining quota percentages;
 - progress bars;
 - compact status dots;
 - observed or expected reset time.
@@ -115,3 +119,21 @@ http://127.0.0.1:8080/history
 ```
 
 History can be filtered by account, severity level, and category prefix. It includes scheduler events, telemetry listener events, smart-anchor decisions, update events, and anchor failures.
+
+Events with structured payloads can be expanded in the table to inspect stored error details.
+
+## Logs
+
+The application writes rotating logs to:
+
+```text
+data/logs/ai-quota-monitor.log
+```
+
+Native/Proxmox deployments normally place this under:
+
+```text
+/var/lib/ai-quota-monitor/logs/ai-quota-monitor.log
+```
+
+Override with `AI_QUOTA_MONITOR_LOG_FILE` when needed. These logs include route and background-service exceptions that are also summarized in the event history.

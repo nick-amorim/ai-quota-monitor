@@ -9,7 +9,8 @@ It helps make Codex quota windows visible and predictable without OpenAI API key
 - Tracks two account profiles, schedules, authentication state, and quota telemetry.
 - Shows a dark-first dashboard at `/` for account status, usage, events, schedules, and updates.
 - Provides a compact Raspberry Pi monitor at `/monitor` and `/monitor/{account_slug}`.
-- Runs manual and scheduled Codex anchor turns to help keep usage windows predictable.
+- Refreshes connected-account usage automatically on the configured polling interval.
+- Runs manual anchors, weekly anchors, and derived same-day 5-hour wake anchors.
 - Stores raw telemetry, normalized usage snapshots, anchor history, and operational events in SQLite.
 - Supports Docker Compose and native/Proxmox systemd deployments.
 
@@ -40,7 +41,7 @@ Run tests:
 docker compose up -d
 ```
 
-The container listens on port `8080` and stores persistent runtime state in the `ai-quota-monitor-data` volume mounted at `/var/lib/ai-quota-monitor`.
+The container listens on port `8080` and stores persistent runtime state in the `ai-quota-monitor-data` volume mounted at `/var/lib/ai-quota-monitor`. Docker images include a build-time Codex CLI runtime check because quota telemetry reads `codex app-server`.
 
 To rebuild and restart a local image:
 
@@ -48,6 +49,8 @@ To rebuild and restart a local image:
 docker compose build --pull
 docker compose up -d
 ```
+
+If the dashboard shows a telemetry error such as `Codex CLI is not available`, rebuild and recreate the container with the commands above.
 
 ## Proxmox / Native Install
 
@@ -98,6 +101,7 @@ Copy `.env.example` values into your deployment environment. Important settings:
 | `AI_QUOTA_MONITOR_HOST` / `AI_QUOTA_MONITOR_PORT` | Bind address and port |
 | `AI_QUOTA_MONITOR_DATABASE_URL` | SQLite database URL |
 | `AI_QUOTA_MONITOR_DATA_DIR` | Runtime state directory |
+| `AI_QUOTA_MONITOR_LOG_FILE` | Rotating app log path |
 | `AI_QUOTA_MONITOR_TIMEZONE` | Default display/schedule timezone |
 | `AI_QUOTA_MONITOR_ENABLE_SCHEDULER` | Enable daily/weekly anchor jobs |
 | `AI_QUOTA_MONITOR_ENABLE_APP_SERVER_NOTIFICATIONS` | Enable live quota update listeners |

@@ -103,6 +103,10 @@ Observed reset timestamps from Codex are stored separately from expected reset t
 
 If app-server payloads are sparse, missing normalized fields carry forward the previous known value. If neither known window can be found, the raw payload is retained and the snapshot is marked `unsupported`.
 
+The database stores Codex's `usedPercent` values. Dashboard and monitor cards display remaining quota as `100 - usedPercent` so the UI aligns with Codex's `Usage remaining` menu.
+
+Manual refresh failures are recorded as `telemetry.refresh.failed` warning events. If no newer successful snapshot exists, the account card enters a telemetry-error state with the stored failure detail.
+
 ## Live Updates
 
 When enabled, the app keeps long-running app-server listeners open for connected accounts. `account/rateLimits/updated` notifications are normalized through the same raw-plus-snapshot path as manual refreshes.
@@ -113,12 +117,35 @@ Disable listeners with:
 AI_QUOTA_MONITOR_ENABLE_APP_SERVER_NOTIFICATIONS=false
 ```
 
+## Logging
+
+`ai_quota_monitor.logging_config.configure_logging` attaches a rotating file handler to the `ai_quota_monitor` logger during app creation.
+
+Default path:
+
+```text
+data/logs/ai-quota-monitor.log
+```
+
+Settings:
+
+| Setting | Purpose |
+| --- | --- |
+| `AI_QUOTA_MONITOR_LOG_LEVEL` | Log level |
+| `AI_QUOTA_MONITOR_LOG_FILE` | Explicit log file path |
+| `AI_QUOTA_MONITOR_LOG_MAX_BYTES` | Rotation size |
+| `AI_QUOTA_MONITOR_LOG_BACKUP_COUNT` | Number of rotated files |
+
+Route handlers and background services log exceptions before returning user-facing redirects or event rows.
+
 ## Scheduler
 
 On startup, APScheduler reads account schedules and creates:
 
-- one daily anchor job per enabled account when daily anchors are enabled;
+- one same-day 5-hour cadence of daily anchor jobs per enabled account when daily anchors are enabled;
 - one weekly target anchor job per enabled account.
+
+Daily cadence jobs are derived from `daily_anchor_time` by repeatedly adding the 300-minute 5-hour window until local midnight. A `05:00` start produces `05:00`, `10:00`, `15:00`, and `20:00`; a `09:00` start produces `09:00`, `14:00`, and `19:00`.
 
 Missed jobs use `AI_QUOTA_MONITOR_MISSED_ANCHOR_POLICY`:
 
@@ -129,12 +156,15 @@ Missed jobs use `AI_QUOTA_MONITOR_MISSED_ANCHOR_POLICY`:
 
 Smart scheduled anchors refresh telemetry before and after the anchor and record whether reset timing changed.
 
+The same APScheduler instance also owns the automatic telemetry poll job, `telemetry:refresh-all`. It runs every `AI_QUOTA_MONITOR_USAGE_POLL_INTERVAL_MINUTES` minutes and refreshes connected, enabled accounts only.
+
 ## Partial Refreshes
 
 The frontend uses server-rendered partials:
 
 | Partial | Refresh |
 | --- | --- |
+| `/partials/accounts` | Dashboard account cards |
 | `/partials/accounts/{account_id}/usage` | Account usage panel |
 | `/partials/scheduler` | Scheduled jobs |
 | `/partials/events/recent` | Recent events |
@@ -146,5 +176,16 @@ The frontend uses server-rendered partials:
 ## UI Notes
 
 The dashboard is a dark-first operational interface with an optional persisted light mode. The Settings drawer holds less-frequent controls so the main dashboard stays focused.
+
+Visible account labels use the Codex account email when available. Until an account is authenticated, the UI uses `Account not logged in` instead of internal seed labels such as Account A or Account B.
+
+Account cards show compact schedule context: all enabled daily weekdays, derived daily wake times, the weekly target, and the next scheduled wake call from APScheduler.
+
+All frontend timestamps are formatted in the configured application timezone. SQLite may return UTC datetimes without timezone metadata, so display formatters treat naive database values as UTC before converting them to the local display timezone.
+
+Dashboard quota windows intentionally use compact labels:
+
+- 5-hour: remaining percent, `Reset HH:MM`, and `Anchor HH:MM`
+- weekly: remaining percent, `Reset Day HH:MM`, and `Anchor Weekday HH:MM`
 
 The monitor view is dark-only and intentionally dense. It hides the normal app bar, omits the timeline, and uses compact account labels, status dots, reset chips, and quota bars for a 3.7-inch Raspberry Pi display.

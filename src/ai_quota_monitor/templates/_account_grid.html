@@ -1,0 +1,106 @@
+<div
+  id="account-grid"
+  class="account-grid"
+  hx-get="/partials/accounts"
+  hx-trigger="every 10s"
+  hx-swap="outerHTML"
+>
+  {% for account in accounts %}
+  {% set account_view = account_views.get(account.id) %}
+  {% set login = login_attempts.get(account.id) %}
+  {% set latest_anchor = latest_anchor_by_account.get(account.id) %}
+  <article class="account-panel">
+    <header class="account-panel__header">
+      <div class="account-identity">
+        <h3>{{ account_view.display_label if account_view else "Account not logged in" }}</h3>
+        {% if account_view and account_view.secondary_label %}
+        <p>{{ account_view.secondary_label }}</p>
+        {% endif %}
+      </div>
+      <div class="state-stack">
+        <span class="account-state">{{ "Enabled" if account.enabled else "Paused" }}</span>
+        <span class="auth-state auth-state--{{ account.auth_status }}">
+          {{ account.auth_status.replace("_", " ") | title }}
+        </span>
+      </div>
+    </header>
+
+    {% if login %}
+    <section class="login-panel" aria-label="Device login for {{ account_view.display_label if account_view else 'Account not logged in' }}">
+      <div>
+        <span>Device code</span>
+        <strong>{{ login.user_code }}</strong>
+      </div>
+      <a href="{{ login.verification_url }}" target="_blank" rel="noreferrer">
+        Open verification
+      </a>
+    </section>
+    {% endif %}
+
+    {% include "_account_usage.html" %}
+
+    <div class="account-bottom-grid">
+      <dl class="schedule-summary">
+        <div>
+          <dt>Daily</dt>
+          <dd>{{ account_view.daily_schedule_label if account_view else "Off" }}</dd>
+        </div>
+        <div>
+          <dt>Weekly</dt>
+          <dd>{{ account_view.weekly_schedule_label if account_view else "Off" }}</dd>
+        </div>
+        <div>
+          <dt>Next wake</dt>
+          <dd>{{ account_view.next_wake_label if account_view else "None" }}</dd>
+        </div>
+      </dl>
+
+      <section class="anchor-feedback" aria-label="Latest anchor for {{ account_view.display_label if account_view else 'Account not logged in' }}">
+        <span>Last anchor</span>
+        {% if latest_anchor %}
+        <strong>{{ latest_anchor.status | title }}</strong>
+        <small>
+          {% if latest_anchor.completed_at %}
+          {{ format_time(latest_anchor.completed_at) }}
+          {% else %}
+          Running
+          {% endif %}
+          {% if latest_anchor.final_response %} / {{ latest_anchor.final_response }}{% endif %}
+        </small>
+        {% else %}
+        <strong>None</strong>
+        <small>Waiting</small>
+        {% endif %}
+      </section>
+    </div>
+
+    <div class="account-actions-row" aria-label="Actions for {{ account_view.display_label if account_view else 'Account not logged in' }}">
+      <form method="post" action="/accounts/{{ account.id }}/auth/device-login">
+        <button type="submit">Login</button>
+      </form>
+      <form method="post" action="/accounts/{{ account.id }}/auth/status">
+        <button type="submit" class="secondary-button">Check</button>
+      </form>
+      {% if login %}
+      <form method="post" action="/accounts/{{ account.id }}/auth/cancel">
+        <button type="submit" class="secondary-button">Cancel</button>
+      </form>
+      {% endif %}
+      <form method="post" action="/accounts/{{ account.id }}/anchors/run">
+        <button
+          type="submit"
+          {% if account.auth_status != "connected" %}disabled{% endif %}
+        >
+          Anchor
+        </button>
+      </form>
+      <button type="button" class="secondary-button" data-drawer-open="settings-drawer">
+        Settings
+      </button>
+      <form method="post" action="/accounts/{{ account.id }}/auth/logout">
+        <button type="submit" class="danger-button">Logout</button>
+      </form>
+    </div>
+  </article>
+  {% endfor %}
+</div>

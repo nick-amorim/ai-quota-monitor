@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, time, timedelta
 from typing import Protocol
 from zoneinfo import ZoneInfo
 
@@ -9,6 +9,7 @@ from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_MISSED, JobExecutionEv
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.schedulers.base import SchedulerNotRunningError
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy.orm import Session, sessionmaker
 
 from ai_quota_monitor.config import Settings
@@ -16,9 +17,11 @@ from ai_quota_monitor.models import Account, AppSetting
 from ai_quota_monitor.services.accounts import WEEKDAYS, list_accounts
 from ai_quota_monitor.services.anchors import AnchorAlreadyRunningError
 from ai_quota_monitor.services.events import record_event
+from ai_quota_monitor.services.reset_times import FIVE_HOUR_WINDOW_MINUTES
 from ai_quota_monitor.services.smart_anchors import SmartAnchorResult
 
 SCHEDULER_JOB_PREFIX = "anchor:"
+TELEMETRY_JOB_ID = "telemetry:refresh-all"
 AP_DAYS = {
     "monday": "mon",
     "tuesday": "tue",
@@ -38,6 +41,7 @@ class ScheduledAnchorJob:
     kind: str
     next_run_at: datetime | None
     timezone: str
+    sequence: int | None = None
 
 
 @dataclass(frozen=True)
@@ -69,16 +73,23 @@ class ScheduledAnchorRunner(Protocol):
         ...
 
 
+class UsageTelemetryRefresher(Protocol):
+    def refresh_connected_accounts(self) -> object:
+        ...
+
+
 class QuotaScheduler:
     def __init__(
         self,
         session_factory: sessionmaker[Session],
         anchor_runner: ScheduledAnchorRunner,
         settings: Settings,
+        telemetry_refresher: UsageTelemetryRefresher | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._anchor_runner = anchor_runner
         self._settings = settings
+        self._telemetry_refresher = telemetry_refresher
         self._scheduler: BackgroundScheduler | None = None
 
     @property
@@ -128,6 +139,7 @@ class QuotaScheduler:
 
         scheduler = self._require_scheduler()
         self._remove_anchor_jobs()
+        self._sync_telemetry_job()
         runtime_config = self._runtime_config()
 
         added = 0
@@ -141,21 +153,24 @@ class QuotaScheduler:
             if account.schedule.daily_anchor_enabled:
                 active_days = _active_weekdays(account)
                 if active_days:
-                    scheduler.add_job(
-                        self.run_anchor_job,
-                        trigger=CronTrigger(
-                            day_of_week=",".join(active_days),
-                            hour=account.schedule.daily_anchor_time.hour,
-                            minute=account.schedule.daily_anchor_time.minute,
-                            timezone=_timezone(account.schedule.timezone),
-                        ),
-                        args=(account.id, "daily"),
-                        id=_job_id(account.id, "daily"),
-                        misfire_grace_time=runtime_config.misfire_grace_time,
-                        name=f"{account.name} daily anchor",
-                        replace_existing=True,
-                    )
-                    added += 1
+                    for sequence, anchor_time in enumerate(
+                        daily_anchor_times(account.schedule.daily_anchor_time)
+                    ):
+                        scheduler.add_job(
+                            self.run_anchor_job,
+                            trigger=CronTrigger(
+                                day_of_week=",".join(active_days),
+                                hour=anchor_time.hour,
+                                minute=anchor_time.minute,
+                                timezone=_timezone(account.schedule.timezone),
+                            ),
+                            args=(account.id, "daily"),
+                            id=_job_id(account.id, "daily", sequence=sequence),
+                            misfire_grace_time=runtime_config.misfire_grace_time,
+                            name=f"{account.name} daily anchor {anchor_time:%H:%M}",
+                            replace_existing=True,
+                        )
+                        added += 1
 
             scheduler.add_job(
                 self.run_anchor_job,
@@ -194,14 +209,14 @@ class QuotaScheduler:
             if not job.id.startswith(SCHEDULER_JOB_PREFIX):
                 continue
 
-            _, account_id_raw, kind = job.id.split(":", maxsplit=2)
-            account_id = int(account_id_raw)
+            account_id, kind, sequence = _parse_job_id(job.id)
             jobs.append(
                 ScheduledAnchorJob(
                     id=job.id,
                     account_id=account_id,
                     account_name=account_names.get(account_id, f"Account {account_id}"),
                     kind=kind,
+                    sequence=sequence,
                     next_run_at=job.next_run_time,
                     timezone=str(job.trigger.timezone),
                 )
@@ -214,6 +229,7 @@ class QuotaScheduler:
                 item.next_run_at or datetime.max,
                 item.account_id,
                 item.kind,
+                item.sequence if item.sequence is not None else -1,
             ),
         )
 
@@ -262,6 +278,20 @@ class QuotaScheduler:
                 },
             )
 
+    def run_usage_refresh_job(self) -> None:
+        if self._telemetry_refresher is None:
+            return
+        try:
+            self._telemetry_refresher.refresh_connected_accounts()
+        except Exception as exc:
+            self._record_event(
+                level="error",
+                category="scheduler.telemetry",
+                message="Scheduled usage refresh failed",
+                payload={"error": str(exc)},
+            )
+            raise
+
     def _require_scheduler(self) -> BackgroundScheduler:
         if self._scheduler is None:
             raise RuntimeError("Scheduler has not been started")
@@ -273,12 +303,35 @@ class QuotaScheduler:
             if job.id.startswith(SCHEDULER_JOB_PREFIX):
                 scheduler.remove_job(job.id)
 
+    def _sync_telemetry_job(self) -> None:
+        scheduler = self._require_scheduler()
+        existing = scheduler.get_job(TELEMETRY_JOB_ID)
+        if existing is not None:
+            scheduler.remove_job(TELEMETRY_JOB_ID)
+
+        if self._telemetry_refresher is None:
+            return
+
+        interval_minutes = max(1, self._settings.usage_poll_interval_minutes)
+        scheduler.add_job(
+            self.run_usage_refresh_job,
+            trigger=IntervalTrigger(
+                minutes=interval_minutes,
+                timezone=_timezone(self._settings.timezone),
+            ),
+            id=TELEMETRY_JOB_ID,
+            max_instances=1,
+            misfire_grace_time=max(30, interval_minutes * 60),
+            name="Codex usage telemetry refresh",
+            next_run_time=datetime.now(_timezone(self._settings.timezone)),
+            replace_existing=True,
+        )
+
     def _record_apscheduler_event(self, event: JobExecutionEvent) -> None:
         if not event.job_id.startswith(SCHEDULER_JOB_PREFIX):
             return
 
-        _, account_id_raw, kind = event.job_id.split(":", maxsplit=2)
-        account_id = int(account_id_raw)
+        account_id, kind, _sequence = _parse_job_id(event.job_id)
         if event.code == EVENT_JOB_MISSED:
             self._record_event(
                 level="warning",
@@ -344,8 +397,28 @@ class QuotaScheduler:
         )
 
 
-def _job_id(account_id: int, kind: str) -> str:
-    return f"{SCHEDULER_JOB_PREFIX}{account_id}:{kind}"
+def _job_id(account_id: int, kind: str, *, sequence: int | None = None) -> str:
+    suffix = f":{sequence}" if sequence is not None else ""
+    return f"{SCHEDULER_JOB_PREFIX}{account_id}:{kind}{suffix}"
+
+
+def _parse_job_id(job_id: str) -> tuple[int, str, int | None]:
+    parts = job_id.split(":")
+    if len(parts) < 3 or parts[0] != "anchor":
+        raise ValueError(f"Invalid scheduler job id: {job_id}")
+
+    sequence = int(parts[3]) if len(parts) > 3 else None
+    return int(parts[1]), parts[2], sequence
+
+
+def daily_anchor_times(first_anchor_time: time) -> tuple[time, ...]:
+    current = datetime.combine(datetime.min.date(), first_anchor_time)
+    day_end = current.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    anchors = []
+    while current < day_end:
+        anchors.append(current.time().replace(second=0, microsecond=0))
+        current += timedelta(minutes=FIVE_HOUR_WINDOW_MINUTES)
+    return tuple(anchors)
 
 
 def _active_weekdays(account: Account) -> list[str]:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import UTC, datetime, time
 from urllib.parse import parse_qs
 
@@ -17,7 +18,14 @@ from ai_quota_monitor.services.accounts import (
 )
 from ai_quota_monitor.services.anchors import get_app_setting, update_app_setting
 from ai_quota_monitor.services.events import EventFilters, list_events, recent_events
-from ai_quota_monitor.services.monitor import MonitorView, build_monitor_view
+from ai_quota_monitor.services.monitor import (
+    MonitorView,
+    build_monitor_view,
+    format_local_datetime,
+    format_local_time,
+)
+
+logger = logging.getLogger(__name__)
 
 
 def register_routes(templates: Jinja2Templates) -> APIRouter:
@@ -34,9 +42,19 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 request.app.state.settings.anchor_prompt,
             )
         usage_by_account = request.app.state.telemetry_service.latest_snapshots_by_account()
+        telemetry_errors_by_account = (
+            request.app.state.telemetry_service.latest_refresh_errors_by_account()
+        )
         scheduled_jobs = request.app.state.quota_scheduler.next_runs()
-        monitor_view = _monitor_view(request, accounts, usage_by_account, scheduled_jobs)
+        monitor_view = _monitor_view(
+            request,
+            accounts,
+            usage_by_account,
+            scheduled_jobs,
+            telemetry_errors_by_account=telemetry_errors_by_account,
+        )
         system_info = request.app.state.system_service.info()
+        anchor_runs = request.app.state.anchor_service.recent_runs(limit=8)
 
         return templates.TemplateResponse(
             request,
@@ -49,7 +67,8 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 "weekdays": WEEKDAYS,
                 "login_attempts": request.app.state.auth_manager.login_snapshots(),
                 "anchor_prompt": anchor_prompt,
-                "anchor_runs": request.app.state.anchor_service.recent_runs(limit=8),
+                "anchor_runs": anchor_runs,
+                "latest_anchor_by_account": _latest_anchor_by_account(anchor_runs),
                 "usage_by_account": usage_by_account,
                 "account_views": monitor_view.account_map,
                 "timeline": monitor_view.timeline,
@@ -57,6 +76,41 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 "scheduled_jobs": scheduled_jobs,
                 "system_info": system_info,
                 "events": recent_events(session_factory, limit=8),
+                "account_labels_by_id": _account_labels_by_id(accounts),
+                **_template_helpers(request),
+            },
+        )
+
+    @router.get("/partials/accounts", response_class=HTMLResponse)
+    async def accounts_partial(request: Request) -> HTMLResponse:
+        session_factory = request.app.state.session_factory
+        with session_factory() as session:
+            accounts = list_accounts(session)
+        usage_by_account = request.app.state.telemetry_service.latest_snapshots_by_account()
+        telemetry_errors_by_account = (
+            request.app.state.telemetry_service.latest_refresh_errors_by_account()
+        )
+        scheduled_jobs = request.app.state.quota_scheduler.next_runs()
+        monitor_view = _monitor_view(
+            request,
+            accounts,
+            usage_by_account,
+            scheduled_jobs,
+            telemetry_errors_by_account=telemetry_errors_by_account,
+        )
+        anchor_runs = request.app.state.anchor_service.recent_runs(limit=8)
+
+        return templates.TemplateResponse(
+            request,
+            "_account_grid.html",
+            {
+                "accounts": accounts,
+                "login_attempts": request.app.state.auth_manager.login_snapshots(),
+                "usage_by_account": usage_by_account,
+                "account_views": monitor_view.account_map,
+                "latest_anchor_by_account": _latest_anchor_by_account(anchor_runs),
+                "account_labels_by_id": _account_labels_by_id(accounts),
+                **_template_helpers(request),
             },
         )
 
@@ -95,6 +149,7 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 "selected_account_id": selected_account_id,
                 "selected_level": selected_level,
                 "selected_category": selected_category,
+                **_template_helpers(request),
             },
         )
 
@@ -162,11 +217,15 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
             if account is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
         usage_by_account = request.app.state.telemetry_service.latest_snapshots_by_account()
+        telemetry_errors_by_account = (
+            request.app.state.telemetry_service.latest_refresh_errors_by_account()
+        )
         monitor_view = _monitor_view(
             request,
             [account],
             usage_by_account,
             request.app.state.quota_scheduler.next_runs(),
+            telemetry_errors_by_account=telemetry_errors_by_account,
         )
 
         return templates.TemplateResponse(
@@ -176,16 +235,22 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 "account": account,
                 "usage_by_account": usage_by_account,
                 "account_views": monitor_view.account_map,
+                **_template_helpers(request),
             },
         )
 
     @router.get("/partials/scheduler", response_class=HTMLResponse)
     async def scheduler_partial(request: Request) -> HTMLResponse:
+        session_factory = request.app.state.session_factory
+        with session_factory() as session:
+            accounts = list_accounts(session)
         return templates.TemplateResponse(
             request,
             "_scheduled_jobs.html",
             {
                 "scheduled_jobs": request.app.state.quota_scheduler.next_runs(),
+                "account_labels_by_id": _account_labels_by_id(accounts),
+                **_template_helpers(request),
             },
         )
 
@@ -197,6 +262,7 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
             "_recent_events.html",
             {
                 "events": recent_events(session_factory, limit=8),
+                **_template_helpers(request),
             },
         )
 
@@ -247,6 +313,7 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
         except KeyError:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from None
         except Exception:
+            logger.exception("Failed to start device login for account %s", account_id)
             pass
 
         return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
@@ -263,6 +330,7 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
         except KeyError:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from None
         except Exception:
+            logger.exception("Failed to refresh auth status for account %s", account_id)
             pass
 
         request.app.state.rate_limit_listener.reload()
@@ -275,6 +343,7 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
         except KeyError:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from None
         except Exception:
+            logger.exception("Failed to log out account %s", account_id)
             pass
 
         request.app.state.rate_limit_listener.reload()
@@ -290,7 +359,16 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
         except KeyError:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from None
         except Exception:
+            logger.exception("Manual anchor failed for account %s", account_id)
             pass
+        else:
+            try:
+                await asyncio.to_thread(
+                    request.app.state.telemetry_service.refresh_account_usage,
+                    account_id,
+                )
+            except Exception:
+                logger.exception("Post-anchor usage refresh failed for account %s", account_id)
 
         return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -378,12 +456,21 @@ def _load_monitor_view(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
     usage_by_account = request.app.state.telemetry_service.latest_snapshots_by_account()
+    telemetry_errors_by_account = (
+        request.app.state.telemetry_service.latest_refresh_errors_by_account()
+    )
     scheduled_jobs = [
         job
         for job in request.app.state.quota_scheduler.next_runs()
         if account_slug is None or any(account.id == job.account_id for account in accounts)
     ]
-    return _monitor_view(request, accounts, usage_by_account, scheduled_jobs)
+    return _monitor_view(
+        request,
+        accounts,
+        usage_by_account,
+        scheduled_jobs,
+        telemetry_errors_by_account=telemetry_errors_by_account,
+    )
 
 
 def _monitor_view(
@@ -391,11 +478,41 @@ def _monitor_view(
     accounts,
     usage_by_account,
     scheduled_jobs,
+    *,
+    telemetry_errors_by_account=None,
 ) -> MonitorView:
     return build_monitor_view(
         accounts=accounts,
         usage_by_account=usage_by_account,
+        telemetry_errors_by_account=telemetry_errors_by_account,
         scheduled_jobs=scheduled_jobs,
         settings=request.app.state.settings,
         now=datetime.now(UTC),
     )
+
+
+def _latest_anchor_by_account(anchor_runs) -> dict[int, object]:
+    latest: dict[int, object] = {}
+    for run in anchor_runs:
+        if run.account_id not in latest:
+            latest[run.account_id] = run
+    return latest
+
+
+def _template_helpers(request: Request) -> dict[str, object]:
+    timezone = request.app.state.settings.timezone
+    return {
+        "format_datetime": lambda value: format_local_datetime(value, timezone),
+        "format_time": lambda value: format_local_time(value, timezone),
+        "account_label": _account_label,
+    }
+
+
+def _account_label(account) -> str:
+    if account is None:
+        return "-"
+    return account.account_display or "Account not logged in"
+
+
+def _account_labels_by_id(accounts) -> dict[int, str]:
+    return {account.id: _account_label(account) for account in accounts}

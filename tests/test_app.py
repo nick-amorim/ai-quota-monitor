@@ -79,6 +79,14 @@ class FakeTelemetryBackend:
         }
 
 
+class FailingTelemetryBackend:
+    def read_account(self, account):
+        return {"requiresOpenaiAuth": False}
+
+    def read_rate_limits(self, account):
+        raise FileNotFoundError("No such file or directory: 'codex'")
+
+
 class FakeSystemService:
     def __init__(self, settings):
         self.settings = settings
@@ -173,25 +181,29 @@ def test_dashboard_shell_renders(tmp_path):
     assert '<html lang="en" class="dark">' in response.text
     assert "ai-quota-monitor" in response.text
     assert "Accounts and schedules" in response.text
-    assert "Account A" in response.text
-    assert "Account B" in response.text
-    assert "Start device login" in response.text
-    assert "Check status" in response.text
-    assert "Run anchor" in response.text
+    assert "Account not logged in" in response.text
+    assert "Account A" not in response.text
+    assert "Account B" not in response.text
+    assert "Login" in response.text
+    assert "Check" in response.text
+    assert "Anchor" in response.text
     assert "Global anchor prompt" in response.text
     assert "Scheduled anchors" in response.text
     assert "Timeline" in response.text
+    assert "Next wake" in response.text
+    assert "Mon-Fri 05:00, 10:00, 15:00, 20:00" in response.text
     assert "Deployment and updates" in response.text
     assert "Check update plan" in response.text
     assert 'data-theme-toggle' in response.text
     assert 'data-drawer-open="settings-drawer"' in response.text
     assert 'id="settings-drawer"' in response.text
+    assert 'hx-get="/partials/accounts"' in response.text
     assert 'href="/monitor"' in response.text
     assert 'href="/history"' in response.text
     assert 'hx-get="/partials/scheduler"' in response.text
     assert 'hx-get="/partials/events/recent"' in response.text
     assert "No anchor runs yet." in response.text
-    assert "America/Recife" in response.text
+    assert "Application" not in response.text
 
 
 def test_database_file_is_created(tmp_path):
@@ -208,6 +220,7 @@ def test_database_file_is_created(tmp_path):
         pass
 
     assert database_path.exists()
+    assert (tmp_path / "logs" / "ai-quota-monitor.log").exists()
 
 
 def test_app_factory_does_not_reuse_dashboard_routes(tmp_path):
@@ -275,6 +288,7 @@ def test_auth_status_route_updates_account_metadata(tmp_path):
 
     assert response.status_code == 303
     assert "user@example.test" in dashboard.text
+    assert "<h3>user@example.test</h3>" in dashboard.text
     assert "plus" in dashboard.text
 
 
@@ -328,6 +342,7 @@ def test_manual_anchor_route_records_history(tmp_path):
     assert "Recent anchor runs" in dashboard.text
     assert "Completed" in dashboard.text
     assert "OK" in dashboard.text
+    assert "28.0%" in dashboard.text
 
 
 def test_usage_refresh_route_records_quota_snapshot(tmp_path):
@@ -342,12 +357,33 @@ def test_usage_refresh_route_records_quota_snapshot(tmp_path):
 
     assert response.status_code == 303
     assert "Quota telemetry" in dashboard.text
-    assert "Observed reset" in dashboard.text
-    assert "Expected reset" in dashboard.text
-    assert "Configured:" in dashboard.text
-    assert "Weekly drift" in dashboard.text
-    assert "72" in dashboard.text
-    assert "43" in dashboard.text
+    assert "Reset" in dashboard.text
+    assert "Anchor" in dashboard.text
+    assert "Configured:" not in dashboard.text
+    assert "28.0%" in dashboard.text
+    assert "57.0%" in dashboard.text
+
+
+def test_usage_refresh_route_surfaces_refresh_failure(tmp_path):
+    app = create_app(
+        make_settings(tmp_path),
+        auth_backend_factory=FakeAuthBackend,
+        anchor_backend_factory=FakeAnchorBackend,
+        telemetry_backend_factory=FailingTelemetryBackend,
+        system_service_factory=FakeSystemService,
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/accounts/1/usage/refresh",
+            follow_redirects=False,
+        )
+        dashboard = client.get("/")
+
+    assert response.status_code == 303
+    assert "Telemetry error" in dashboard.text
+    assert "Cannot read Codex usage" in dashboard.text
+    assert "Codex CLI is not available" in dashboard.text
 
 
 def test_history_route_filters_events(tmp_path):
@@ -368,6 +404,7 @@ def test_history_route_filters_events(tmp_path):
                 category="live-updates",
                 message="Listener start failed",
                 account_id=2,
+                payload={"error": "codex app-server exited"},
             )
 
         response = client.get("/history?account_id=2&level=warning")
@@ -375,6 +412,7 @@ def test_history_route_filters_events(tmp_path):
     assert response.status_code == 200
     assert "Event history" in response.text
     assert "Listener start failed" in response.text
+    assert "codex app-server exited" in response.text
     assert "Scheduler reloaded" not in response.text
     assert "All levels" in response.text
 
@@ -385,12 +423,16 @@ def test_partial_routes_render_refreshable_sections(tmp_path):
     with TestClient(app) as client:
         client.post("/accounts/1/usage/refresh", follow_redirects=False)
         usage = client.get("/partials/accounts/1/usage")
+        accounts = client.get("/partials/accounts")
         scheduler = client.get("/partials/scheduler")
         events = client.get("/partials/events/recent")
 
     assert usage.status_code == 200
     assert "Quota telemetry" in usage.text
-    assert "72" in usage.text
+    assert "28.0%" in usage.text
+    assert accounts.status_code == 200
+    assert 'id="account-grid"' in accounts.text
+    assert "Last anchor" in accounts.text
     assert scheduler.status_code == 200
     assert "Scheduled anchors" in scheduler.text
     assert events.status_code == 200
@@ -413,9 +455,10 @@ def test_monitor_route_renders_compact_quota_view(tmp_path):
     assert ">5h<" in response.text
     assert ">7d<" in response.text
     assert "timeline-panel" not in response.text
-    assert "Account A" in response.text
+    assert "Account not logged in" in response.text
+    assert "Account A" not in response.text
     assert "5-hour" in response.text
-    assert "Weekly drift" in response.text
+    assert "57.0%" in response.text
 
 
 def test_account_monitor_and_partial_filter_to_slug(tmp_path):
@@ -429,9 +472,11 @@ def test_account_monitor_and_partial_filter_to_slug(tmp_path):
     assert response.status_code == 200
     assert partial.status_code == 200
     assert missing.status_code == 404
-    assert "Account A" in response.text
+    assert "Account not logged in" in response.text
+    assert "Account A" not in response.text
     assert "Account B" not in response.text
-    assert "Account A" in partial.text
+    assert "Account not logged in" in partial.text
+    assert "Account A" not in partial.text
     assert "Account B" not in partial.text
 
 

@@ -17,6 +17,7 @@ from ai_quota_monitor.database import (
     create_session_factory,
     initialize_database,
 )
+from ai_quota_monitor.logging_config import configure_logging
 from ai_quota_monitor.migrations import run_migrations
 from ai_quota_monitor.routes import health, system
 from ai_quota_monitor.routes.dashboard import register_routes
@@ -54,12 +55,13 @@ def create_app(
         TelemetryBackend,
     ] = CodexAppServerTelemetryBackend,
     scheduler_factory: Callable[
-        [sessionmaker[Session], SmartAnchorService, Settings],
+        [sessionmaker[Session], SmartAnchorService, Settings, TelemetryService],
         SchedulerService,
     ] = QuotaScheduler,
     system_service_factory: Callable[[Settings], SystemService] = SystemService,
 ) -> FastAPI:
     app_settings = settings or get_settings()
+    configure_logging(app_settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -98,10 +100,14 @@ def create_app(
             app.state.telemetry_service,
             app_settings,
         )
+        app.state.auth_manager.set_status_change_callback(
+            app.state.rate_limit_listener.reload
+        )
         app.state.quota_scheduler = scheduler_factory(
             session_factory,
             app.state.smart_anchor_service,
             app_settings,
+            app.state.telemetry_service,
         )
         if app_settings.enable_scheduler:
             app.state.quota_scheduler.start()

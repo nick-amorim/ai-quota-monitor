@@ -14,6 +14,10 @@ Important settings:
 | `AI_QUOTA_MONITOR_TIMEZONE` | Default display and schedule timezone |
 | `AI_QUOTA_MONITOR_DATABASE_URL` | SQLite database URL |
 | `AI_QUOTA_MONITOR_DATA_DIR` | Runtime data directory |
+| `AI_QUOTA_MONITOR_LOG_LEVEL` | Python app log level |
+| `AI_QUOTA_MONITOR_LOG_FILE` | Rotating app log path, defaults under `data/logs` |
+| `AI_QUOTA_MONITOR_LOG_MAX_BYTES` | Maximum size before log rotation |
+| `AI_QUOTA_MONITOR_LOG_BACKUP_COUNT` | Number of rotated log files to keep |
 | `AI_QUOTA_MONITOR_ENABLE_SCHEDULER` | Enable background scheduled anchors |
 | `AI_QUOTA_MONITOR_ENABLE_APP_SERVER_NOTIFICATIONS` | Enable live quota update listeners |
 | `AI_QUOTA_MONITOR_ENABLE_WEB_UPDATES` | Allow real native/Proxmox web updates |
@@ -46,6 +50,13 @@ AI_QUOTA_MONITOR_ENABLE_WEB_UPDATES=false
 ```
 
 Docker deployments are immutable from inside the running container. The dashboard can report update status, but real Docker updates should rebuild or pull the image and recreate the service.
+
+Quota telemetry uses `codex app-server` inside the container. The image validates that the packaged Codex CLI runtime is present during build. If the dashboard reports `Codex CLI is not available`, rebuild and recreate the container:
+
+```bash
+docker compose build --pull
+docker compose up -d
+```
 
 ## Proxmox LXC
 

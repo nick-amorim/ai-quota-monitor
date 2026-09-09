@@ -9,7 +9,7 @@ from ai_quota_monitor.database import (
     initialize_database,
 )
 from ai_quota_monitor.migrations import run_migrations
-from ai_quota_monitor.models import UsageRaw, UsageSnapshot
+from ai_quota_monitor.models import Account, UsageRaw, UsageSnapshot
 from ai_quota_monitor.services.accounts import seed_defaults
 from ai_quota_monitor.services.telemetry import (
     TelemetryService,
@@ -191,6 +191,57 @@ def test_refresh_all_accounts_isolates_backend_failure(tmp_path):
     with session_factory() as session:
         assert session.query(UsageRaw).count() == 1
         assert session.query(UsageSnapshot).count() == 1
+    engine.dispose()
+
+
+def test_refresh_connected_accounts_skips_disconnected_accounts(tmp_path):
+    backend = AccountSensitiveBackend()
+    engine, session_factory, service = make_service(tmp_path, backend)
+
+    with session_factory() as session:
+        account = session.get(Account, 1)
+        assert account is not None
+        account.auth_status = "not_configured"
+        account = session.get(Account, 2)
+        assert account is not None
+        account.auth_status = "connected"
+        session.commit()
+
+    results = service.refresh_connected_accounts()
+
+    assert [(result.account_id, result.status) for result in results] == [(2, "ok")]
+    engine.dispose()
+
+
+def test_refresh_failure_records_visible_error_event(tmp_path):
+    backend = FakeTelemetryBackend([FileNotFoundError("No such file or directory: 'codex'")])
+    engine, session_factory, service = make_service(tmp_path, backend)
+
+    result = service.refresh_account_usage(1)
+    errors = service.latest_refresh_errors_by_account()
+
+    assert result.status == "failed"
+    assert "Codex CLI is not available" in (result.error or "")
+    assert errors[1] == result.error
+
+    with session_factory() as session:
+        assert session.query(UsageRaw).count() == 0
+    engine.dispose()
+
+
+def test_successful_refresh_hides_older_refresh_error(tmp_path):
+    backend = FakeTelemetryBackend([
+        RuntimeError("temporary telemetry failure"),
+        full_payload(),
+    ])
+    engine, _session_factory, service = make_service(tmp_path, backend)
+
+    service.refresh_account_usage(1)
+    assert service.latest_refresh_errors_by_account()[1] == "temporary telemetry failure"
+
+    service.refresh_account_usage(1)
+
+    assert service.latest_refresh_errors_by_account() == {}
     engine.dispose()
 
 

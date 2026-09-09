@@ -103,7 +103,11 @@ def test_app_server_client_sends_initialize_and_account_requests(tmp_path):
         created["process"] = process
         return process
 
-    with CodexAppServerClient(account, process_factory=fake_factory) as client:
+    with CodexAppServerClient(
+        account,
+        command=("codex",),
+        process_factory=fake_factory,
+    ) as client:
         account_result = client.read_account()
         limits_result = client.read_rate_limits()
 
@@ -137,6 +141,7 @@ def test_app_server_client_dispatches_notifications_between_responses(tmp_path):
 
     with CodexAppServerClient(
         account,
+        command=("codex",),
         process_factory=fake_factory,
         notification_handler=notifications.append,
     ) as client:
