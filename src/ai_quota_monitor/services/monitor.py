@@ -7,7 +7,11 @@ from zoneinfo import ZoneInfo
 from ai_quota_monitor.config import Settings
 from ai_quota_monitor.models import Account, UsageSnapshot
 from ai_quota_monitor.services.reset_times import expected_reset_times
-from ai_quota_monitor.services.scheduler import AP_DAYS, ScheduledAnchorJob
+from ai_quota_monitor.services.scheduler import (
+    AP_DAYS,
+    ScheduledAnchorJob,
+    daily_anchor_times,
+)
 
 DAY_SHORT_LABELS = {
     "monday": "Mon",
@@ -412,7 +416,11 @@ def _daily_schedule_label(account: Account) -> str:
     if schedule is None or not schedule.daily_anchor_enabled:
         return "Off"
     days = _active_days_label(account)
-    return f"{days} {_format_time(schedule.daily_anchor_time)}"
+    times = ", ".join(
+        _format_time(value)
+        for value in daily_anchor_times(schedule.daily_anchor_time)
+    )
+    return f"{days} {times}"
 
 
 def _weekly_schedule_label(account: Account) -> str:

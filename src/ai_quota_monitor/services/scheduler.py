@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, time, timedelta
 from typing import Protocol
 from zoneinfo import ZoneInfo
 
@@ -17,6 +17,7 @@ from ai_quota_monitor.models import Account, AppSetting
 from ai_quota_monitor.services.accounts import WEEKDAYS, list_accounts
 from ai_quota_monitor.services.anchors import AnchorAlreadyRunningError
 from ai_quota_monitor.services.events import record_event
+from ai_quota_monitor.services.reset_times import FIVE_HOUR_WINDOW_MINUTES
 from ai_quota_monitor.services.smart_anchors import SmartAnchorResult
 
 SCHEDULER_JOB_PREFIX = "anchor:"
@@ -40,6 +41,7 @@ class ScheduledAnchorJob:
     kind: str
     next_run_at: datetime | None
     timezone: str
+    sequence: int | None = None
 
 
 @dataclass(frozen=True)
@@ -151,21 +153,24 @@ class QuotaScheduler:
             if account.schedule.daily_anchor_enabled:
                 active_days = _active_weekdays(account)
                 if active_days:
-                    scheduler.add_job(
-                        self.run_anchor_job,
-                        trigger=CronTrigger(
-                            day_of_week=",".join(active_days),
-                            hour=account.schedule.daily_anchor_time.hour,
-                            minute=account.schedule.daily_anchor_time.minute,
-                            timezone=_timezone(account.schedule.timezone),
-                        ),
-                        args=(account.id, "daily"),
-                        id=_job_id(account.id, "daily"),
-                        misfire_grace_time=runtime_config.misfire_grace_time,
-                        name=f"{account.name} daily anchor",
-                        replace_existing=True,
-                    )
-                    added += 1
+                    for sequence, anchor_time in enumerate(
+                        daily_anchor_times(account.schedule.daily_anchor_time)
+                    ):
+                        scheduler.add_job(
+                            self.run_anchor_job,
+                            trigger=CronTrigger(
+                                day_of_week=",".join(active_days),
+                                hour=anchor_time.hour,
+                                minute=anchor_time.minute,
+                                timezone=_timezone(account.schedule.timezone),
+                            ),
+                            args=(account.id, "daily"),
+                            id=_job_id(account.id, "daily", sequence=sequence),
+                            misfire_grace_time=runtime_config.misfire_grace_time,
+                            name=f"{account.name} daily anchor {anchor_time:%H:%M}",
+                            replace_existing=True,
+                        )
+                        added += 1
 
             scheduler.add_job(
                 self.run_anchor_job,
@@ -204,14 +209,14 @@ class QuotaScheduler:
             if not job.id.startswith(SCHEDULER_JOB_PREFIX):
                 continue
 
-            _, account_id_raw, kind = job.id.split(":", maxsplit=2)
-            account_id = int(account_id_raw)
+            account_id, kind, sequence = _parse_job_id(job.id)
             jobs.append(
                 ScheduledAnchorJob(
                     id=job.id,
                     account_id=account_id,
                     account_name=account_names.get(account_id, f"Account {account_id}"),
                     kind=kind,
+                    sequence=sequence,
                     next_run_at=job.next_run_time,
                     timezone=str(job.trigger.timezone),
                 )
@@ -224,6 +229,7 @@ class QuotaScheduler:
                 item.next_run_at or datetime.max,
                 item.account_id,
                 item.kind,
+                item.sequence if item.sequence is not None else -1,
             ),
         )
 
@@ -325,8 +331,7 @@ class QuotaScheduler:
         if not event.job_id.startswith(SCHEDULER_JOB_PREFIX):
             return
 
-        _, account_id_raw, kind = event.job_id.split(":", maxsplit=2)
-        account_id = int(account_id_raw)
+        account_id, kind, _sequence = _parse_job_id(event.job_id)
         if event.code == EVENT_JOB_MISSED:
             self._record_event(
                 level="warning",
@@ -392,8 +397,28 @@ class QuotaScheduler:
         )
 
 
-def _job_id(account_id: int, kind: str) -> str:
-    return f"{SCHEDULER_JOB_PREFIX}{account_id}:{kind}"
+def _job_id(account_id: int, kind: str, *, sequence: int | None = None) -> str:
+    suffix = f":{sequence}" if sequence is not None else ""
+    return f"{SCHEDULER_JOB_PREFIX}{account_id}:{kind}{suffix}"
+
+
+def _parse_job_id(job_id: str) -> tuple[int, str, int | None]:
+    parts = job_id.split(":")
+    if len(parts) < 3 or parts[0] != "anchor":
+        raise ValueError(f"Invalid scheduler job id: {job_id}")
+
+    sequence = int(parts[3]) if len(parts) > 3 else None
+    return int(parts[1]), parts[2], sequence
+
+
+def daily_anchor_times(first_anchor_time: time) -> tuple[time, ...]:
+    current = datetime.combine(datetime.min.date(), first_anchor_time)
+    day_end = current.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    anchors = []
+    while current < day_end:
+        anchors.append(current.time().replace(second=0, microsecond=0))
+        current += timedelta(minutes=FIVE_HOUR_WINDOW_MINUTES)
+    return tuple(anchors)
 
 
 def _active_weekdays(account: Account) -> list[str]:

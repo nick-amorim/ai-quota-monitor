@@ -72,10 +72,12 @@ The prompt is editable from the Settings drawer. Manual anchors use account-scop
 
 The scheduler creates:
 
-- one daily anchor job per enabled account when daily anchors are enabled;
+- one same-day 5-hour cadence of daily anchor jobs per enabled account when daily anchors are enabled;
 - one weekly target anchor job per enabled account.
 
-Schedule edits are saved from the Settings drawer and reloaded without restarting the app. Account cards show the enabled daily weekdays, weekly target, and next scheduled wake call.
+The configured daily time is the first wake of the day. Later same-day wakes are derived every 5 hours. For example, `05:00` creates `05:00`, `10:00`, `15:00`, and `20:00`; `09:00` creates `09:00`, `14:00`, and `19:00`.
+
+Schedule edits are saved from the Settings drawer and reloaded without restarting the app. Account cards show the enabled daily weekdays, derived daily wake times, weekly target, and next scheduled wake call.
 
 Smart scheduled-anchor validation:
 

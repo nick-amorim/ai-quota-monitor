@@ -12,7 +12,7 @@ from ai_quota_monitor.migrations import run_migrations
 from ai_quota_monitor.models import Account, EventLog
 from ai_quota_monitor.services.accounts import seed_defaults
 from ai_quota_monitor.services.anchors import AnchorAlreadyRunningError, update_app_setting
-from ai_quota_monitor.services.scheduler import QuotaScheduler
+from ai_quota_monitor.services.scheduler import QuotaScheduler, daily_anchor_times
 from ai_quota_monitor.services.smart_anchors import SmartAnchorResult
 
 
@@ -78,6 +78,7 @@ def test_scheduler_creates_database_driven_daily_and_weekly_jobs(tmp_path):
     try:
         jobs = scheduler.next_runs()
         job_keys = {(job.account_name, job.kind) for job in jobs}
+        daily_jobs = [job for job in jobs if job.kind == "daily"]
 
         assert job_keys == {
             ("Account A", "daily"),
@@ -85,6 +86,9 @@ def test_scheduler_creates_database_driven_daily_and_weekly_jobs(tmp_path):
             ("Account B", "daily"),
             ("Account B", "weekly"),
         }
+        assert len(daily_jobs) == 7
+        assert {job.sequence for job in daily_jobs if job.account_id == 1} == {0, 1, 2, 3}
+        assert {job.sequence for job in daily_jobs if job.account_id == 2} == {0, 1, 2}
         assert all(job.next_run_at is not None for job in jobs)
         assert all(
             job.misfire_grace_time == 30 * 60
@@ -219,3 +223,17 @@ def test_scheduler_adds_automatic_usage_refresh_job(tmp_path):
     finally:
         scheduler.shutdown()
         engine.dispose()
+
+
+def test_daily_anchor_times_follow_five_hour_cadence_until_day_end():
+    assert daily_anchor_times(time(5, 0)) == (
+        time(5, 0),
+        time(10, 0),
+        time(15, 0),
+        time(20, 0),
+    )
+    assert daily_anchor_times(time(9, 0)) == (
+        time(9, 0),
+        time(14, 0),
+        time(19, 0),
+    )

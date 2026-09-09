@@ -78,7 +78,7 @@ def test_monitor_view_reports_weekly_drift_and_today_timeline(tmp_path):
 
         assert view.generated_clock_label == "01:00"
         assert account.display_label == "Account not logged in"
-        assert account.daily_schedule_label == "Mon-Fri 05:00"
+        assert account.daily_schedule_label == "Mon-Fri 05:00, 10:00, 15:00, 20:00"
         assert account.weekly_schedule_label == "Mon 05:00"
         assert account.next_wake_label == "Daily Mon 05:00"
         assert five_hour.short_label == "5h"

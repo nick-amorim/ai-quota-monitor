@@ -142,8 +142,10 @@ Route handlers and background services log exceptions before returning user-faci
 
 On startup, APScheduler reads account schedules and creates:
 
-- one daily anchor job per enabled account when daily anchors are enabled;
+- one same-day 5-hour cadence of daily anchor jobs per enabled account when daily anchors are enabled;
 - one weekly target anchor job per enabled account.
+
+Daily cadence jobs are derived from `daily_anchor_time` by repeatedly adding the 300-minute 5-hour window until local midnight. A `05:00` start produces `05:00`, `10:00`, `15:00`, and `20:00`; a `09:00` start produces `09:00`, `14:00`, and `19:00`.
 
 Missed jobs use `AI_QUOTA_MONITOR_MISSED_ANCHOR_POLICY`:
 
@@ -177,7 +179,7 @@ The dashboard is a dark-first operational interface with an optional persisted l
 
 Visible account labels use the Codex account email when available. Until an account is authenticated, the UI uses `Account not logged in` instead of internal seed labels such as Account A or Account B.
 
-Account cards show compact schedule context: all enabled daily weekdays, the weekly target, and the next scheduled wake call from APScheduler.
+Account cards show compact schedule context: all enabled daily weekdays, derived daily wake times, the weekly target, and the next scheduled wake call from APScheduler.
 
 All frontend timestamps are formatted in the configured application timezone. SQLite may return UTC datetimes without timezone metadata, so display formatters treat naive database values as UTC before converting them to the local display timezone.
 

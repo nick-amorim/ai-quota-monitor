@@ -191,7 +191,7 @@ def test_dashboard_shell_renders(tmp_path):
     assert "Scheduled anchors" in response.text
     assert "Timeline" in response.text
     assert "Next wake" in response.text
-    assert "Mon-Fri 05:00" in response.text
+    assert "Mon-Fri 05:00, 10:00, 15:00, 20:00" in response.text
     assert "Deployment and updates" in response.text
     assert "Check update plan" in response.text
     assert 'data-theme-toggle' in response.text
