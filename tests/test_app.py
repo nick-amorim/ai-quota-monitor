@@ -170,6 +170,7 @@ def test_dashboard_shell_renders(tmp_path):
         response = client.get("/")
 
     assert response.status_code == 200
+    assert '<html lang="en" class="dark">' in response.text
     assert "ai-quota-monitor" in response.text
     assert "Accounts and schedules" in response.text
     assert "Account A" in response.text
@@ -182,6 +183,9 @@ def test_dashboard_shell_renders(tmp_path):
     assert "Timeline" in response.text
     assert "Deployment and updates" in response.text
     assert "Check update plan" in response.text
+    assert 'data-theme-toggle' in response.text
+    assert 'data-drawer-open="settings-drawer"' in response.text
+    assert 'id="settings-drawer"' in response.text
     assert 'href="/monitor"' in response.text
     assert 'href="/history"' in response.text
     assert 'hx-get="/partials/scheduler"' in response.text
@@ -401,6 +405,7 @@ def test_monitor_route_renders_compact_quota_view(tmp_path):
         response = client.get("/monitor")
 
     assert response.status_code == 200
+    assert '<html lang="en" class="dark">' in response.text
     assert "Quota monitor" in response.text
     assert 'class="monitor-body"' in response.text
     assert 'hx-get="/partials/monitor"' in response.text

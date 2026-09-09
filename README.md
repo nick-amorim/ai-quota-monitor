@@ -35,6 +35,8 @@ The current application provides:
 - current-day timeline for anchors and reset events;
 - compact always-on monitor view at `/monitor`;
 - single-account compact monitor views at `/monitor/{account_slug}`;
+- dark-first responsive dashboard shell with persisted light/dark toggle;
+- dashboard settings drawer for schedules, anchor prompt, and update controls;
 - reset display that separates configured, expected, and observed timing;
 - weekly reset drift indicators;
 - empty, loading, error, and stale telemetry states;
@@ -189,6 +191,18 @@ http://127.0.0.1:8080/history
 
 History can be filtered by account, severity level, and category prefix. Telemetry notification lifecycle events, scheduler events, smart-anchor decisions, and anchor failures are persisted there for debugging without mixing operational noise into the main account cards.
 
+## Dashboard Interface
+
+The dashboard defaults to a dark operational theme and stores the user's light/dark preference in browser local storage. The shell keeps account state, usage windows, scheduler health, recent events, and the current-day timeline visible on the main page.
+
+Configuration-heavy controls live in the Settings drawer:
+
+- account schedule targets;
+- global anchor prompt;
+- system update dry-run and execution controls.
+
+This keeps the dashboard focused for daily monitoring while still making operational controls available without leaving the page.
+
 ## Timeline and Compact Monitor
 
 The management dashboard includes a current-day timeline for:
@@ -210,7 +224,7 @@ http://127.0.0.1:8080/monitor/account-a
 http://127.0.0.1:8080/monitor/account-b
 ```
 
-The compact monitor avoids tables and fixed-width content so it can run on small always-on displays. It refreshes itself every 15 seconds through server-rendered partials.
+The compact monitor always uses the dark monitor theme, even if the dashboard is switched to light mode. It avoids tables and fixed-width content so it can run on small always-on displays such as a Raspberry Pi screen. It refreshes itself every 15 seconds through server-rendered partials.
 
 Each quota window shows:
 
