@@ -1,18 +1,33 @@
 <section
   id="recent-events"
-  class="history-panel"
+  class="ops-panel recent-panel"
   aria-labelledby="event-history-title"
   hx-get="/partials/events/recent"
   hx-trigger="every 15s"
   hx-swap="outerHTML"
 >
-  <div class="panel-heading-row">
+  <div class="section-heading">
     <div>
       <p class="eyebrow">Events</p>
-      <h3 id="event-history-title">Recent events</h3>
+      <h2 id="event-history-title">Recent activity</h2>
     </div>
     <a href="/history" class="secondary-link">View history</a>
   </div>
 
-  {% include "_events_table.html" %}
+  {% if events %}
+  <div class="activity-list">
+    {% for event in events %}
+    <div class="activity-item">
+      <span class="status-dot status-dot--{{ 'success' if event.level == 'info' else ('warning' if event.level == 'warning' else 'error') }}" aria-hidden="true"></span>
+      <div>
+        <strong>{{ event.message }}</strong>
+        <span>{{ account_label(event.account) }} &middot; {{ event.category }}</span>
+      </div>
+      <time>{{ format_datetime(event.created_at) }}</time>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="empty-state">No events found.</p>
+  {% endif %}
 </section>

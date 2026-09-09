@@ -1,5 +1,15 @@
 (function () {
   const THEME_KEY = "aiQuotaMonitorTheme";
+  const FOCUSABLE_SELECTOR = [
+    "a[href]",
+    "button:not([disabled])",
+    "input:not([disabled])",
+    "select:not([disabled])",
+    "textarea:not([disabled])",
+    "[tabindex]:not([tabindex='-1'])",
+  ].join(",");
+  let activeDrawer = null;
+  let drawerOpener = null;
 
   function parseInterval(trigger) {
     const match = trigger.match(/every\s+(\d+)s/);
@@ -36,6 +46,7 @@
       });
       if (!response.ok) {
         element.dataset.refreshState = "error";
+        scheduleNextRefresh(element);
         return;
       }
 
@@ -49,15 +60,26 @@
           element.replaceWith(replacement);
           initialize(replacement);
           initializeDrawers(replacement);
+          updateRefreshCountdowns();
         }
         return;
       }
       element.innerHTML = html;
       element.dataset.refreshState = "idle";
+      scheduleNextRefresh(element);
       initialize(element);
       initializeDrawers(element);
+      updateRefreshCountdowns();
     } catch {
       element.dataset.refreshState = "error";
+      scheduleNextRefresh(element);
+    }
+  }
+
+  function scheduleNextRefresh(element) {
+    const interval = parseInterval(element.getAttribute("hx-trigger") || "");
+    if (interval !== null) {
+      element.dataset.nextRefreshAt = String(Date.now() + interval);
     }
   }
 
@@ -69,6 +91,7 @@
       element.dataset.hxRefreshReady = "true";
 
       const trigger = element.getAttribute("hx-trigger") || "";
+      scheduleNextRefresh(element);
       if (trigger.includes("load")) {
         refresh(element);
       }
@@ -91,6 +114,13 @@
     const normalized = theme === "light" ? "light" : "dark";
     document.documentElement.classList.remove("dark", "light");
     document.documentElement.classList.add(normalized);
+    document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
+      const isDark = normalized === "dark";
+      const label = isDark ? "Switch to light theme" : "Switch to dark theme";
+      button.setAttribute("aria-label", label);
+      button.setAttribute("title", label);
+      button.setAttribute("aria-pressed", String(isDark));
+    });
   }
 
   function initializeTheme() {
@@ -119,16 +149,24 @@
     });
   }
 
-  function openDrawer(id) {
+  function focusableElements(root) {
+    return selectWithRoot(root, FOCUSABLE_SELECTOR).filter((element) => {
+      return element.offsetParent !== null || element === document.activeElement;
+    });
+  }
+
+  function openDrawer(id, opener) {
     const drawer = document.getElementById(id);
     if (!drawer) {
       return;
     }
+    drawerOpener = opener || document.activeElement;
+    activeDrawer = drawer;
     drawer.hidden = false;
     document.body.classList.add("drawer-open");
-    const closeButton = drawer.querySelector("button[data-drawer-close]");
-    if (closeButton) {
-      closeButton.focus();
+    const focusTargets = focusableElements(drawer);
+    if (focusTargets.length > 0) {
+      focusTargets[0].focus();
     }
   }
 
@@ -139,6 +177,31 @@
     }
     drawer.hidden = true;
     document.body.classList.remove("drawer-open");
+    activeDrawer = null;
+    if (drawerOpener && drawerOpener.isConnected && typeof drawerOpener.focus === "function") {
+      drawerOpener.focus();
+    }
+    drawerOpener = null;
+  }
+
+  function trapDrawerFocus(event) {
+    if (!activeDrawer || event.key !== "Tab") {
+      return;
+    }
+    const focusTargets = focusableElements(activeDrawer);
+    if (focusTargets.length === 0) {
+      event.preventDefault();
+      return;
+    }
+    const first = focusTargets[0];
+    const last = focusTargets[focusTargets.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 
   function initializeDrawers(root) {
@@ -147,7 +210,7 @@
         return;
       }
       button.dataset.drawerReady = "true";
-      button.addEventListener("click", () => openDrawer(button.dataset.drawerOpen));
+      button.addEventListener("click", () => openDrawer(button.dataset.drawerOpen, button));
     });
 
     selectWithRoot(root, "[data-drawer-close]").forEach((button) => {
@@ -159,21 +222,38 @@
     });
   }
 
+  function updateRefreshCountdowns() {
+    document.querySelectorAll("[data-refresh-countdown]").forEach((element) => {
+      const targetId = element.dataset.refreshTarget;
+      const target = targetId ? document.getElementById(targetId) : null;
+      const nextRefreshAt = Number(target ? target.dataset.nextRefreshAt : 0);
+      if (!target || !nextRefreshAt) {
+        element.textContent = "Refresh --";
+        return;
+      }
+      const seconds = Math.max(0, Math.ceil((nextRefreshAt - Date.now()) / 1000));
+      element.textContent = `Refresh ${seconds}s`;
+    });
+  }
+
   function initializeShell() {
     initializeTheme();
     initializeDrawers(document);
     document.addEventListener("keydown", (event) => {
       if (event.key !== "Escape") {
+        trapDrawerFocus(event);
         return;
       }
       document.querySelectorAll(".drawer:not([hidden])").forEach((drawer) => {
         closeDrawer(drawer.id);
       });
     });
+    window.setInterval(updateRefreshCountdowns, 1000);
   }
 
   window.addEventListener("DOMContentLoaded", () => {
     initializeShell();
     initialize(document);
+    updateRefreshCountdowns();
   });
 })();

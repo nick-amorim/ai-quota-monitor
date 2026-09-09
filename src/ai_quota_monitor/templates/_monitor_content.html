@@ -6,12 +6,12 @@
   hx-swap="outerHTML"
 >
   <header class="monitor-toolbar">
-    <span class="monitor-live" aria-hidden="true"></span>
+    <span class="monitor-live" aria-label="Live"></span>
     <time title="{{ monitor_view.generated_at_label }}">{{ monitor_view.generated_clock_label }}</time>
     <nav class="monitor-links" aria-label="Monitor accounts">
       <a href="/monitor">All</a>
       {% for account in monitor_view.accounts %}
-      <a href="/monitor/{{ account.slug }}">{{ account.display_label }}</a>
+      <a href="/monitor/{{ account.slug }}" title="{{ account.display_label }}">{{ account.display_label }}</a>
       {% endfor %}
     </nav>
   </header>
@@ -20,7 +20,7 @@
     {% for account in monitor_view.accounts %}
     <article class="monitor-card monitor-card--{{ account.snapshot_status_class }}">
       <header class="monitor-card__header">
-        <h3>{{ account.display_label }}</h3>
+        <h2 title="{{ account.display_label }}">{{ account.display_label }}</h2>
         <span
           class="monitor-auth-dot monitor-auth-dot--{{ account.snapshot_status_class }}"
           title="{{ account.auth_label }}; {{ account.snapshot_status_label }}"
@@ -48,6 +48,7 @@
           </div>
           <div class="monitor-window__meta">
             <span>{{ window.reset_source_short_label }} {{ window.reset_time_label }}</span>
+            <span>{{ window.status_label }}</span>
             {% if window.drift_label %}
             <span title="{{ window.drift_label }}">{{ window.drift_label.replace("Weekly drift ", "") }}</span>
             {% endif %}

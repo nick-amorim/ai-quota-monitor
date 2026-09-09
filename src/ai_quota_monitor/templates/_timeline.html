@@ -1,8 +1,8 @@
-<section class="timeline-panel" aria-labelledby="timeline-title">
-  <div class="panel-heading-row">
+<section class="ops-panel timeline-panel" aria-labelledby="timeline-title">
+  <div class="section-heading">
     <div>
       <p class="eyebrow">Today</p>
-      <h3 id="timeline-title">Timeline</h3>
+      <h2 id="timeline-title">Timeline</h2>
     </div>
   </div>
 
@@ -11,7 +11,6 @@
     {% for entry in timeline %}
     <div
       class="timeline-item timeline-item--{{ entry.entry_class }}"
-      style="left: {{ entry.minute_percent }}%"
     >
       <span>{{ entry.time_label }}</span>
       <strong>{{ entry.account_name }}</strong>

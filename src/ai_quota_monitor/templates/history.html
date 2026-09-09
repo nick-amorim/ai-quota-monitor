@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="dashboard-shell" aria-labelledby="history-title">
-  <div>
+<section class="dashboard-shell history-shell" aria-labelledby="history-title">
+  <header class="page-heading">
     <p class="eyebrow">Events</p>
-    <h2 id="history-title">Event history</h2>
-  </div>
+    <h1 id="history-title">Event history</h1>
+  </header>
 
   <form method="get" action="/history" class="filter-panel">
     <label>
@@ -37,11 +37,11 @@
     <button type="submit">Apply filters</button>
   </form>
 
-  <section class="history-panel" aria-labelledby="filtered-events-title">
-    <div class="panel-heading-row">
+  <section class="ops-panel history-panel" aria-labelledby="filtered-events-title">
+    <div class="section-heading">
       <div>
         <p class="eyebrow">Filtered</p>
-        <h3 id="filtered-events-title">Events</h3>
+        <h2 id="filtered-events-title">Events</h2>
       </div>
       <a href="/" class="secondary-link">Dashboard</a>
     </div>
