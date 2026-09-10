@@ -247,6 +247,9 @@
   function renderUpdateResult(target, payload, ok) {
     const steps = Array.isArray(payload.steps) ? payload.steps : [];
     const detail = payload.message || payload.detail || "Update request completed.";
+    const current = payload.current_commit ? `Current ${payload.current_commit}` : "";
+    const upstream = payload.upstream_commit ? `Latest ${payload.upstream_commit}` : "";
+    const refs = [current, upstream].filter(Boolean).join(" / ");
     const items = steps.map((step) => {
       const state = step.status || "unknown";
       const command = Array.isArray(step.command) ? step.command.join(" ") : "";
@@ -264,53 +267,128 @@
     target.classList.toggle("system-update-result--error", !ok);
     target.innerHTML = `
       <p>${escapeHtml(detail)}</p>
+      ${refs ? `<p class="system-update-meta">${escapeHtml(refs)}</p>` : ""}
       ${items ? `<ol>${items}</ol>` : ""}
     `;
   }
 
-  function initializeSystemUpdateForms(root) {
-    selectWithRoot(root, "[data-system-update-form]").forEach((form) => {
-      if (form.dataset.systemUpdateReady === "true") {
+  function updateInstallButton(payload) {
+    const button = document.querySelector("[data-system-update-run]");
+    if (!button || typeof payload.update_available === "undefined") {
+      return;
+    }
+
+    const canInstall = payload.update_available === true && payload.can_update === true;
+    button.hidden = !payload.update_available;
+    button.disabled = !canInstall;
+  }
+
+  async function postUpdateRequest(url, body) {
+    const response = await fetch(url, {
+      method: "POST",
+      body: new URLSearchParams(body),
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+    });
+    let payload = {};
+    try {
+      payload = await response.json();
+    } catch {
+      payload = { detail: "Update request returned an invalid response." };
+    }
+    return { response, payload };
+  }
+
+  function setUpdateBusy(buttons, busy) {
+    buttons.forEach((button) => {
+      if (!button) {
         return;
       }
-      form.dataset.systemUpdateReady = "true";
-      form.addEventListener("submit", async (event) => {
-        event.preventDefault();
+      button.disabled = busy || button.dataset.disabledByStatus === "true";
+    });
+  }
+
+  function initializeSystemUpdateControls(root) {
+    selectWithRoot(root, "[data-system-update-check]").forEach((button) => {
+      if (button.dataset.systemUpdateReady === "true") {
+        return;
+      }
+      button.dataset.systemUpdateReady = "true";
+      button.addEventListener("click", async () => {
         const target = document.querySelector("[data-system-update-result]");
+        const installButton = document.querySelector("[data-system-update-run]");
         if (!target) {
-          form.submit();
           return;
         }
 
-        const button = form.querySelector("button[type='submit']");
-        if (button) {
-          button.disabled = true;
-        }
         target.hidden = false;
         target.classList.remove("system-update-result--error");
-        target.textContent = "Running update check...";
+        target.textContent = "Checking for updates...";
+        setUpdateBusy([button, installButton], true);
 
         try {
-          const response = await fetch(form.action, {
-            method: form.method || "POST",
-            body: new URLSearchParams(new FormData(form)),
-            headers: {
-              Accept: "application/json",
-              "Content-Type": "application/x-www-form-urlencoded",
-            },
-          });
-          const payload = await response.json();
+          const { response, payload } = await postUpdateRequest(button.dataset.updateUrl, {});
           renderUpdateResult(target, payload, response.ok);
+          updateInstallButton(payload);
         } catch (error) {
           renderUpdateResult(
             target,
-            { detail: error instanceof Error ? error.message : "Update request failed." },
+            { detail: error instanceof Error ? error.message : "Update check failed." },
             false,
           );
         } finally {
-          if (button) {
-            button.disabled = false;
+          setUpdateBusy([button, installButton], false);
+        }
+      });
+    });
+
+    selectWithRoot(root, "[data-system-update-run]").forEach((button) => {
+      if (button.disabled) {
+        button.dataset.disabledByStatus = "true";
+      }
+      if (button.dataset.systemUpdateReady === "true") {
+        return;
+      }
+      button.dataset.systemUpdateReady = "true";
+      button.addEventListener("click", async () => {
+        const target = document.querySelector("[data-system-update-result]");
+        const checkButton = document.querySelector("[data-system-update-check]");
+        if (!target) {
+          return;
+        }
+
+        target.hidden = false;
+        target.classList.remove("system-update-result--error");
+        target.textContent = "Installing update...";
+        setUpdateBusy([button, checkButton], true);
+
+        try {
+          const { response, payload } = await postUpdateRequest(button.dataset.updateUrl, {
+            dry_run: "false",
+            restart: "true",
+          });
+          renderUpdateResult(target, payload, response.ok);
+          if (response.ok && payload.changed && !payload.dry_run) {
+            target.insertAdjacentHTML(
+              "beforeend",
+              '<p class="system-update-meta">Restart requested. Reloading shortly...</p>',
+            );
+            window.setTimeout(() => window.location.reload(), 6000);
           }
+        } catch (error) {
+          renderUpdateResult(
+            target,
+            {
+              detail: error instanceof Error
+                ? error.message
+                : "Update request failed. The service may be restarting.",
+            },
+            false,
+          );
+        } finally {
+          setUpdateBusy([button, checkButton], false);
         }
       });
     });
@@ -333,7 +411,7 @@
   function initializeShell() {
     initializeTheme();
     initializeDrawers(document);
-    initializeSystemUpdateForms(document);
+    initializeSystemUpdateControls(document);
     document.addEventListener("keydown", (event) => {
       if (event.key !== "Escape") {
         trapDrawerFocus(event);

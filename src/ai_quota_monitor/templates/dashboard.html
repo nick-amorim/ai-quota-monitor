@@ -195,20 +195,23 @@
           <p class="system-message">{{ system_info.update_message }}</p>
 
           <div class="system-actions">
-            <form method="post" action="/api/system/update" data-system-update-form>
-              <input type="hidden" name="dry_run" value="true">
-              <button type="submit" class="secondary-button">Check update plan</button>
-            </form>
-            <form method="post" action="/api/system/update" data-system-update-form>
-              <input type="hidden" name="dry_run" value="false">
-              <input type="hidden" name="restart" value="true">
-              <button
-                type="submit"
-                {% if not system_info.web_updates_enabled or system_info.deployment_mode == "docker" %}disabled{% endif %}
-              >
-                Run update
-              </button>
-            </form>
+            <button
+              type="button"
+              class="secondary-button"
+              data-system-update-check
+              data-update-url="/api/system/update/check"
+            >
+              Check update
+            </button>
+            <button
+              type="button"
+              data-system-update-run
+              data-update-url="/api/system/update"
+              {% if not system_info.web_updates_enabled or system_info.deployment_mode == "docker" %}disabled{% endif %}
+              hidden
+            >
+              Install update
+            </button>
           </div>
           <div class="system-update-result" data-system-update-result role="status" aria-live="polite" hidden></div>
         </section>

@@ -517,6 +517,12 @@ h4 {
   margin: 0;
 }
 
+.system-update-meta {
+  color: var(--muted-foreground);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
 .system-update-result ol {
   display: grid;
   gap: 0.45rem;

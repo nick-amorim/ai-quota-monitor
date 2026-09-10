@@ -15,10 +15,21 @@ from ai_quota_monitor.services.system import (
 
 
 class FakeRunner:
-    def __init__(self, *, dirty: bool = False, fail_command: str | None = None):
+    def __init__(
+        self,
+        *,
+        dirty: bool = False,
+        fail_command: str | None = None,
+        current_commit: str = "abc123",
+        upstream_commit: str = "abc123",
+        ancestor: bool = True,
+    ):
         self.commands: list[list[str]] = []
         self.dirty = dirty
         self.fail_command = fail_command
+        self.current_commit = current_commit
+        self.upstream_commit = upstream_commit
+        self.ancestor = ancestor
 
     def __call__(self, command: list[str], cwd: Path | None):
         self.commands.append(command)
@@ -27,6 +38,22 @@ class FakeRunner:
         if command == ["git", "status", "--porcelain"]:
             stdout = " M README.md\n" if self.dirty else ""
             return CommandResult(command=command, returncode=0, stdout=stdout)
+        if command == ["git", "status", "--porcelain", "--untracked-files=no"]:
+            stdout = " M README.md\n" if self.dirty else ""
+            return CommandResult(command=command, returncode=0, stdout=stdout)
+        if command[:3] == ["git", "rev-parse", "--is-inside-work-tree"]:
+            return CommandResult(command=command, returncode=0, stdout="true\n")
+        if command == ["git", "rev-parse", "--abbrev-ref", "HEAD"]:
+            return CommandResult(command=command, returncode=0, stdout="main\n")
+        if command == ["git", "rev-parse", "HEAD"]:
+            return CommandResult(command=command, returncode=0, stdout=f"{self.current_commit}\n")
+        if command == ["git", "rev-parse", "origin/main"]:
+            return CommandResult(command=command, returncode=0, stdout=f"{self.upstream_commit}\n")
+        if command[:2] == ["git", "merge-base"]:
+            return CommandResult(
+                command=command,
+                returncode=0 if self.ancestor else 1,
+            )
         if command[:2] == ["git", "rev-parse"]:
             return CommandResult(command=command, returncode=0, stdout="abc123\n")
         return CommandResult(command=command, returncode=0, stdout="ok\n")
@@ -71,6 +98,62 @@ def test_update_dry_run_plans_backup_and_shared_update_commands(tmp_path):
     ]
     assert ["git", "status", "--porcelain"] in runner.commands
     assert result.steps[-1].command == ["systemctl", "restart", "ai-quota-monitor"]
+
+
+def test_check_update_reports_already_current_checkout(tmp_path):
+    runner = FakeRunner(current_commit="abc123456", upstream_commit="abc123456")
+    settings = make_settings(tmp_path, deployment_mode="proxmox")
+
+    result = SystemService(settings, runner=runner).check_update()
+
+    assert result.supported is True
+    assert result.update_available is False
+    assert result.can_update is False
+    assert result.message == "Already up to date."
+    assert ["git", "fetch", "--quiet", "origin", "main"] in runner.commands
+
+
+def test_check_update_reports_available_clean_checkout(tmp_path):
+    runner = FakeRunner(current_commit="abc123456", upstream_commit="def789000")
+    settings = make_settings(tmp_path, deployment_mode="proxmox")
+
+    result = SystemService(settings, runner=runner).check_update()
+
+    assert result.update_available is True
+    assert result.can_update is True
+    assert result.current_commit == "abc12345"
+    assert result.upstream_commit == "def78900"
+    assert result.message == "Update available."
+
+
+def test_check_update_blocks_dirty_tracked_checkout(tmp_path):
+    runner = FakeRunner(
+        dirty=True,
+        current_commit="abc123456",
+        upstream_commit="def789000",
+    )
+    settings = make_settings(tmp_path, deployment_mode="native")
+
+    result = SystemService(settings, runner=runner).check_update()
+
+    assert result.update_available is True
+    assert result.can_update is False
+    assert result.message == "Update available, but tracked local changes are present."
+
+
+def test_check_update_blocks_diverged_checkout(tmp_path):
+    runner = FakeRunner(
+        current_commit="abc123456",
+        upstream_commit="def789000",
+        ancestor=False,
+    )
+    settings = make_settings(tmp_path, deployment_mode="native")
+
+    result = SystemService(settings, runner=runner).check_update()
+
+    assert result.update_available is True
+    assert result.can_update is False
+    assert "diverged" in result.message
 
 
 def test_proxmox_web_update_uses_sudo_restart_helper(tmp_path, monkeypatch):
