@@ -134,6 +134,7 @@ The installer creates root-owned command wrappers in `/usr/local/bin` and `/usr/
 ```
 
 The wrapper and Python updater load `/etc/ai-quota-monitor.env` before resolving database, data, backup, install, deployment, or restart settings. Production Proxmox backups therefore use `/var/lib/ai-quota-monitor`, not the development fallback under `./data`.
+When the updater runs as root in Proxmox mode, it repairs `/opt/ai-quota-monitor` and `/var/lib/ai-quota-monitor` ownership back to `aiquota:aiquota` before restarting. This prevents root-created Git objects from breaking later dashboard update checks.
 
 Dry run:
 
@@ -172,4 +173,12 @@ The installer's `--update` mode performs the same local wrapper/helper refresh b
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/nick-amorim/ai-quota-monitor/main/scripts/proxmox/install-lxc.sh) --update
+```
+
+Use the same `--update` command to recover an LXC where **Check update** reports a Git object permission error. It repairs ownership before delegating to the updater and again after the update completes.
+
+If a dashboard-triggered update applies Git, pip, and migration steps but reports that restart was skipped, restart manually from the LXC root shell:
+
+```bash
+systemctl restart ai-quota-monitor
 ```

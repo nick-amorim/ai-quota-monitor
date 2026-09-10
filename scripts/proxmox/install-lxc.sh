@@ -130,8 +130,7 @@ EOF
   cp "$INSTALL_DIR/deploy/systemd/${APP_NAME}.service" "$SERVICE_FILE"
   install_update_wrappers
   install_restart_helper
-  chown -R aiquota:aiquota "$INSTALL_DIR" "$DATA_DIR"
-  chmod +x "$INSTALL_DIR/scripts/update.sh"
+  repair_install_ownership
 
   systemctl daemon-reload
   systemctl enable --now "$APP_NAME"
@@ -199,6 +198,16 @@ EOF
   visudo -cf "$SUDOERS_FILE" >/dev/null
 }
 
+repair_install_ownership() {
+  if ! id aiquota >/dev/null 2>&1; then
+    printf 'Service user aiquota does not exist; cannot repair install ownership.\n' >&2
+    exit 1
+  fi
+  mkdir -p "$DATA_DIR"
+  chown -R aiquota:aiquota "$INSTALL_DIR" "$DATA_DIR"
+  chmod +x "$INSTALL_DIR/scripts/update.sh"
+}
+
 update_current_system() {
   require_root
   if [ ! -x "$INSTALL_DIR/.venv/bin/${APP_NAME}-update" ]; then
@@ -208,7 +217,9 @@ update_current_system() {
   ensure_git_safe_directory
   install_update_wrappers
   install_restart_helper
+  repair_install_ownership
   "$UPDATE_WRAPPER" --yes --restart --deployment-mode proxmox
+  repair_install_ownership
 }
 
 install_into_created_lxc() {

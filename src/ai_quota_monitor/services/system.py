@@ -62,6 +62,7 @@ class UpdateResult:
 
 CommandRunner = Callable[[list[str], Path | None], CommandResult]
 RESTART_HELPER_DIR = Path("/usr/local/sbin")
+PROXMOX_SERVICE_OWNER = "aiquota:aiquota"
 
 
 class SystemService:
@@ -134,10 +135,14 @@ class SystemService:
             )
 
         steps: list[UpdateStep] = []
-        commands = self._update_commands(
-            restart=restart,
-            deployment_mode=deployment_mode,
-        )
+        commands = self._update_commands()
+        ownership_command = _ownership_repair_command(self.settings, deployment_mode)
+        if ownership_command:
+            commands.append(ownership_command)
+        restart_command = _restart_command(self.settings, deployment_mode) if restart else None
+        if restart:
+            if restart_command:
+                commands.append(restart_command)
 
         database_path = _database_path(self.settings.database_url)
         backup_path = _backup_path(self.settings)
@@ -219,6 +224,14 @@ class SystemService:
                 )
                 for command in commands
             )
+            if restart and restart_command is None:
+                steps.append(
+                    UpdateStep(
+                        name="restart",
+                        status="skipped",
+                        detail=_restart_unavailable_message(self.settings),
+                    )
+                )
             return UpdateResult(
                 deployment_mode=deployment_mode,
                 supported=True,
@@ -245,7 +258,7 @@ class SystemService:
                     supported=True,
                     dry_run=False,
                     changed=changed,
-                    message=f"Update failed while running {' '.join(command)}.",
+                    message=_command_failure_message(command),
                     steps=steps,
                 )
             changed = True
@@ -256,6 +269,26 @@ class SystemService:
                     detail=(result.stdout or result.stderr or "Command completed.").strip(),
                     command=result.command,
                 )
+            )
+
+        if restart and restart_command is None:
+            steps.append(
+                UpdateStep(
+                    name="restart",
+                    status="skipped",
+                    detail=_restart_unavailable_message(self.settings),
+                )
+            )
+            return UpdateResult(
+                deployment_mode=deployment_mode,
+                supported=True,
+                dry_run=False,
+                changed=changed,
+                message=(
+                    "Update completed. Restart the service manually to load "
+                    "the new version."
+                ),
+                steps=steps,
             )
 
         return UpdateResult(
@@ -330,11 +363,12 @@ class SystemService:
             self._cwd(),
         )
         if fetch_result.returncode != 0:
+            message = _fetch_failure_message(fetch_result)
             steps.append(
                 UpdateStep(
                     name="fetch",
                     status="failed",
-                    detail=_command_error(fetch_result),
+                    detail=message,
                     command=fetch_result.command,
                 )
             )
@@ -343,7 +377,7 @@ class SystemService:
                 supported=True,
                 dry_run=True,
                 changed=False,
-                message="Could not check for updates.",
+                message=message,
                 steps=steps,
                 update_available=None,
                 can_update=False,
@@ -471,22 +505,14 @@ class SystemService:
             return None
         return result.stdout.strip() or None
 
-    def _update_commands(
-        self,
-        *,
-        restart: bool,
-        deployment_mode: str,
-    ) -> list[list[str]]:
+    def _update_commands(self) -> list[list[str]]:
         target = f"{self.settings.update_remote}/{self.settings.update_branch}"
-        commands = [
+        return [
             ["git", "fetch", self.settings.update_remote],
             ["git", "merge", "--ff-only", target],
             [sys.executable, "-m", "pip", "install", "-e", "."],
             [sys.executable, "-m", "alembic", "upgrade", "head"],
         ]
-        if restart:
-            commands.append(_restart_command(self.settings, deployment_mode))
-        return commands
 
 
 def run_command(command: list[str], cwd: Path | None = None) -> CommandResult:
@@ -624,9 +650,66 @@ def _command_error(result: CommandResult) -> str:
     return (result.stderr or result.stdout or f"Command exited {result.returncode}").strip()
 
 
-def _restart_command(settings: Settings, deployment_mode: str) -> list[str]:
+def _fetch_failure_message(result: CommandResult) -> str:
+    detail = _command_error(result)
+    lowered = detail.lower()
+    permission_markers = (
+        "insufficient permission",
+        "failed to write object",
+        "unpack-objects failed",
+        "permission denied",
+    )
+    if any(marker in lowered for marker in permission_markers):
+        return (
+            "Could not check for updates because the Git checkout is not writable by "
+            "the service user. Run the Proxmox installer with --update from the LXC "
+            "root shell, or repair ownership with: chown -R aiquota:aiquota "
+            "/opt/ai-quota-monitor /var/lib/ai-quota-monitor"
+        )
+    return detail
+
+
+def _command_failure_message(command: list[str]) -> str:
+    if _step_name(command) == "restart":
+        return f"Update applied, but restart failed while running {' '.join(command)}."
+    return f"Update failed while running {' '.join(command)}."
+
+
+def _ownership_repair_command(
+    settings: Settings,
+    deployment_mode: str,
+) -> list[str] | None:
+    if deployment_mode != "proxmox":
+        return None
+    if not _is_root():
+        return None
+    chown = shutil.which("chown")
+    if not chown:
+        return None
+    return [
+        chown,
+        "-R",
+        PROXMOX_SERVICE_OWNER,
+        str(settings.install_dir),
+        str(settings.data_dir),
+    ]
+
+
+def _restart_unavailable_message(settings: Settings) -> str:
+    helper = RESTART_HELPER_DIR / f"{settings.update_service_name}-restart"
+    return (
+        "Automatic restart is not available for this web update because the "
+        f"sudo restart helper was not found at {helper}. Run the Proxmox "
+        "installer with --update, or restart manually with: systemctl restart "
+        f"{settings.update_service_name}"
+    )
+
+
+def _restart_command(settings: Settings, deployment_mode: str) -> list[str] | None:
     helper = RESTART_HELPER_DIR / f"{settings.update_service_name}-restart"
     sudo = shutil.which("sudo")
+    if deployment_mode in {"native", "proxmox"} and _is_root():
+        return ["systemctl", "restart", settings.update_service_name]
     if (
         deployment_mode in {"native", "proxmox"}
         and not _is_root()
@@ -634,6 +717,8 @@ def _restart_command(settings: Settings, deployment_mode: str) -> list[str]:
         and helper.exists()
     ):
         return [sudo, "-n", str(helper)]
+    if deployment_mode in {"native", "proxmox"}:
+        return None
     return ["systemctl", "restart", settings.update_service_name]
 
 
@@ -651,6 +736,8 @@ def _step_name(command: list[str]) -> str:
         return "install"
     if "alembic" in command:
         return "migrate"
+    if len(command) >= 2 and Path(command[0]).name == "chown" and command[1] == "-R":
+        return "ownership"
     if command[:2] == ["systemctl", "restart"] or (
         len(command) >= 2 and Path(command[0]).name == "sudo" and command[1] == "-n"
     ):

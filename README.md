@@ -149,11 +149,19 @@ If a restricted shell does not include `/usr/local/bin` in `PATH`, the installer
 ```
 
 The updater loads `/etc/ai-quota-monitor.env` before backing up the database, running migrations, or restarting the service.
+On Proxmox installs, root-run updates also restore `/opt/ai-quota-monitor` and `/var/lib/ai-quota-monitor` ownership to the `aiquota` service user so dashboard update checks can continue to fetch from Git.
 
 For an older existing LXC, rerun the installer once as root to refresh the updater wrappers, Git ownership trust, and dashboard restart helper:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/nick-amorim/ai-quota-monitor/main/scripts/proxmox/install-lxc.sh) --existing
+bash <(curl -fsSL https://raw.githubusercontent.com/nick-amorim/ai-quota-monitor/main/scripts/proxmox/install-lxc.sh) --update
+```
+
+If the dashboard reports `.git/objects` permission errors, enter the LXC as root and run the same `--update` command above. It repairs checkout ownership, updates the app, runs migrations, and restarts the service.
+If a dashboard update says the update completed but restart was skipped, restart from inside the LXC:
+
+```bash
+systemctl restart ai-quota-monitor
 ```
 
 Runtime layout:
