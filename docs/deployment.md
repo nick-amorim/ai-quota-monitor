@@ -178,6 +178,20 @@ bash <(curl -fsSL https://raw.githubusercontent.com/nick-amorim/ai-quota-monitor
 
 Use the same `--update` command to recover an LXC where **Check update** reports a Git object permission error. It repairs ownership before delegating to the updater and again after the update completes.
 
+If `--update` refuses because tracked checkout files changed, inspect:
+
+```bash
+git -C /opt/ai-quota-monitor status --short --untracked-files=no
+```
+
+When the tracked changes are deployment drift rather than intentional source edits, recover with:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/nick-amorim/ai-quota-monitor/main/scripts/proxmox/install-lxc.sh) --update --repair-checkout
+```
+
+The repair flag saves a patch backup under `/var/lib/ai-quota-monitor/backups/`, restores tracked files to `HEAD`, then continues with the normal fast-forward update.
+
 If a dashboard-triggered update applies Git, pip, and migration steps but reports that restart was skipped, restart manually from the LXC root shell:
 
 ```bash

@@ -158,6 +158,12 @@ bash <(curl -fsSL https://raw.githubusercontent.com/nick-amorim/ai-quota-monitor
 ```
 
 If the dashboard reports `.git/objects` permission errors, enter the LXC as root and run the same `--update` command above. It repairs checkout ownership, updates the app, runs migrations, and restarts the service.
+If `--update` refuses because a tracked checkout file changed, review `git -C /opt/ai-quota-monitor status --short --untracked-files=no`. To intentionally restore tracked checkout files after saving a patch backup, run:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/nick-amorim/ai-quota-monitor/main/scripts/proxmox/install-lxc.sh) --update --repair-checkout
+```
+
 If a dashboard update says the update completed but restart was skipped, restart from inside the LXC:
 
 ```bash
