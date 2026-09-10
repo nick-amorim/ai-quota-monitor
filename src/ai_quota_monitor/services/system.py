@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -55,6 +56,7 @@ class UpdateResult:
 
 
 CommandRunner = Callable[[list[str], Path | None], CommandResult]
+RESTART_HELPER_DIR = Path("/usr/local/sbin")
 
 
 class SystemService:
@@ -127,7 +129,10 @@ class SystemService:
             )
 
         steps: list[UpdateStep] = []
-        commands = self._update_commands(restart=restart)
+        commands = self._update_commands(
+            restart=restart,
+            deployment_mode=deployment_mode,
+        )
 
         database_path = _database_path(self.settings.database_url)
         backup_path = _backup_path(self.settings)
@@ -268,7 +273,12 @@ class SystemService:
             return None
         return result.stdout.strip() or None
 
-    def _update_commands(self, *, restart: bool) -> list[list[str]]:
+    def _update_commands(
+        self,
+        *,
+        restart: bool,
+        deployment_mode: str,
+    ) -> list[list[str]]:
         target = f"{self.settings.update_remote}/{self.settings.update_branch}"
         commands = [
             ["git", "fetch", self.settings.update_remote],
@@ -277,7 +287,7 @@ class SystemService:
             [sys.executable, "-m", "alembic", "upgrade", "head"],
         ]
         if restart:
-            commands.append(["systemctl", "restart", self.settings.update_service_name])
+            commands.append(_restart_command(self.settings, deployment_mode))
         return commands
 
 
@@ -393,6 +403,24 @@ def _command_error(result: CommandResult) -> str:
     return (result.stderr or result.stdout or f"Command exited {result.returncode}").strip()
 
 
+def _restart_command(settings: Settings, deployment_mode: str) -> list[str]:
+    helper = RESTART_HELPER_DIR / f"{settings.update_service_name}-restart"
+    sudo = shutil.which("sudo")
+    if (
+        deployment_mode in {"native", "proxmox"}
+        and not _is_root()
+        and sudo
+        and helper.exists()
+    ):
+        return [sudo, "-n", str(helper)]
+    return ["systemctl", "restart", settings.update_service_name]
+
+
+def _is_root() -> bool:
+    geteuid = getattr(os, "geteuid", None)
+    return callable(geteuid) and geteuid() == 0
+
+
 def _step_name(command: list[str]) -> str:
     if command[:2] == ["git", "fetch"]:
         return "fetch"
@@ -402,6 +430,8 @@ def _step_name(command: list[str]) -> str:
         return "install"
     if "alembic" in command:
         return "migrate"
-    if command[:2] == ["systemctl", "restart"]:
+    if command[:2] == ["systemctl", "restart"] or (
+        len(command) >= 2 and Path(command[0]).name == "sudo" and command[1] == "-n"
+    ):
         return "restart"
     return command[0]

@@ -222,6 +222,100 @@
     });
   }
 
+  function statusClass(status) {
+    if (status === "completed") {
+      return "success";
+    }
+    if (status === "failed") {
+      return "error";
+    }
+    if (status === "skipped") {
+      return "warning";
+    }
+    return "info";
+  }
+
+  function escapeHtml(value) {
+    return String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function renderUpdateResult(target, payload, ok) {
+    const steps = Array.isArray(payload.steps) ? payload.steps : [];
+    const detail = payload.message || payload.detail || "Update request completed.";
+    const items = steps.map((step) => {
+      const state = step.status || "unknown";
+      const command = Array.isArray(step.command) ? step.command.join(" ") : "";
+      return `
+        <li class="system-update-step system-update-step--${escapeHtml(statusClass(state))}">
+          <span>${escapeHtml(step.name || "step")}</span>
+          <strong>${escapeHtml(state)}</strong>
+          <small>${escapeHtml(step.detail || "")}</small>
+          ${command ? `<code>${escapeHtml(command)}</code>` : ""}
+        </li>
+      `;
+    }).join("");
+
+    target.hidden = false;
+    target.classList.toggle("system-update-result--error", !ok);
+    target.innerHTML = `
+      <p>${escapeHtml(detail)}</p>
+      ${items ? `<ol>${items}</ol>` : ""}
+    `;
+  }
+
+  function initializeSystemUpdateForms(root) {
+    selectWithRoot(root, "[data-system-update-form]").forEach((form) => {
+      if (form.dataset.systemUpdateReady === "true") {
+        return;
+      }
+      form.dataset.systemUpdateReady = "true";
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const target = document.querySelector("[data-system-update-result]");
+        if (!target) {
+          form.submit();
+          return;
+        }
+
+        const button = form.querySelector("button[type='submit']");
+        if (button) {
+          button.disabled = true;
+        }
+        target.hidden = false;
+        target.classList.remove("system-update-result--error");
+        target.textContent = "Running update check...";
+
+        try {
+          const response = await fetch(form.action, {
+            method: form.method || "POST",
+            body: new URLSearchParams(new FormData(form)),
+            headers: {
+              Accept: "application/json",
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+          });
+          const payload = await response.json();
+          renderUpdateResult(target, payload, response.ok);
+        } catch (error) {
+          renderUpdateResult(
+            target,
+            { detail: error instanceof Error ? error.message : "Update request failed." },
+            false,
+          );
+        } finally {
+          if (button) {
+            button.disabled = false;
+          }
+        }
+      });
+    });
+  }
+
   function updateRefreshCountdowns() {
     document.querySelectorAll("[data-refresh-countdown]").forEach((element) => {
       const targetId = element.dataset.refreshTarget;
@@ -239,6 +333,7 @@
   function initializeShell() {
     initializeTheme();
     initializeDrawers(document);
+    initializeSystemUpdateForms(document);
     document.addEventListener("keydown", (event) => {
       if (event.key !== "Escape") {
         trapDrawerFocus(event);

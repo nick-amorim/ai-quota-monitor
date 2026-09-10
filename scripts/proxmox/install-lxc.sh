@@ -17,6 +17,12 @@ INSTALL_DIR="/opt/${APP_NAME}"
 DATA_DIR="/var/lib/${APP_NAME}"
 ENV_FILE="/etc/${APP_NAME}.env"
 SERVICE_FILE="/etc/systemd/system/${APP_NAME}.service"
+UPDATE_WRAPPER="/usr/local/bin/${APP_NAME}-update"
+UPDATE_WRAPPER_PATH_FALLBACK="/usr/bin/${APP_NAME}-update"
+LEGACY_UPDATE_WRAPPER="/usr/local/bin/quotapilot-update"
+LEGACY_UPDATE_WRAPPER_PATH_FALLBACK="/usr/bin/quotapilot-update"
+RESTART_HELPER="/usr/local/sbin/${APP_NAME}-restart"
+SUDOERS_FILE="/etc/sudoers.d/${APP_NAME}-restart"
 MODE="default"
 YES="false"
 
@@ -86,7 +92,7 @@ install_inside_current_system() {
   require_root
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
-  apt-get install -y git python3 python3-venv python3-pip curl
+  apt-get install -y git python3 python3-venv python3-pip curl sudo
 
   if ! id aiquota >/dev/null 2>&1; then
     useradd --system --create-home --shell /usr/sbin/nologin aiquota
@@ -99,7 +105,9 @@ install_inside_current_system() {
       exit 1
     fi
     git clone --branch "$BRANCH" "$REPO_URL" "$INSTALL_DIR"
+    ensure_git_safe_directory
   else
+    ensure_git_safe_directory
     git -C "$INSTALL_DIR" fetch origin
     git -C "$INSTALL_DIR" merge --ff-only "origin/${BRANCH}"
   fi
@@ -120,8 +128,8 @@ AI_QUOTA_MONITOR_ENABLE_WEB_UPDATES=true
 EOF
 
   cp "$INSTALL_DIR/deploy/systemd/${APP_NAME}.service" "$SERVICE_FILE"
-  ln -sf "$INSTALL_DIR/scripts/update.sh" "/usr/local/bin/${APP_NAME}-update"
-  ln -sf "$INSTALL_DIR/scripts/update.sh" "/usr/local/bin/quotapilot-update"
+  install_update_wrappers
+  install_restart_helper
   chown -R aiquota:aiquota "$INSTALL_DIR" "$DATA_DIR"
   chmod +x "$INSTALL_DIR/scripts/update.sh"
 
@@ -130,13 +138,77 @@ EOF
   printf '%s installed. Open http://<container-ip>:8080\n' "$APP_NAME"
 }
 
+ensure_git_safe_directory() {
+  if git config --system --get-all safe.directory 2>/dev/null | grep -Fx -- "$INSTALL_DIR" >/dev/null; then
+    return 0
+  fi
+  git config --system --add safe.directory "$INSTALL_DIR"
+}
+
+install_update_wrappers() {
+  cat > "$UPDATE_WRAPPER" <<EOF
+#!/usr/bin/env sh
+set -eu
+env_file="\${AI_QUOTA_MONITOR_ENV_FILE:-${ENV_FILE}}"
+if [ -r "\$env_file" ]; then
+  set -a
+  . "\$env_file"
+  set +a
+fi
+install_dir="\${AI_QUOTA_MONITOR_INSTALL_DIR:-${INSTALL_DIR}}"
+exec "\$install_dir/.venv/bin/${APP_NAME}-update" "\$@"
+EOF
+  chown root:root "$UPDATE_WRAPPER"
+  chmod 0755 "$UPDATE_WRAPPER"
+  ln -sf "$UPDATE_WRAPPER" "$UPDATE_WRAPPER_PATH_FALLBACK"
+  ln -sf "$UPDATE_WRAPPER" "$LEGACY_UPDATE_WRAPPER"
+  ln -sf "$UPDATE_WRAPPER" "$LEGACY_UPDATE_WRAPPER_PATH_FALLBACK"
+
+  for path in "$UPDATE_WRAPPER" "$UPDATE_WRAPPER_PATH_FALLBACK" "$LEGACY_UPDATE_WRAPPER" "$LEGACY_UPDATE_WRAPPER_PATH_FALLBACK"; do
+    if [ ! -x "$path" ]; then
+      printf 'Updater entry point is not executable: %s\n' "$path" >&2
+      exit 1
+    fi
+  done
+
+  if ! PATH="/usr/bin:/bin" command -v "${APP_NAME}-update" >/dev/null 2>&1; then
+    printf 'Updater command is not discoverable with a minimal root PATH.\n' >&2
+    exit 1
+  fi
+}
+
+install_restart_helper() {
+  cat > "$RESTART_HELPER" <<EOF
+#!/usr/bin/env sh
+set -eu
+service_name="${APP_NAME}"
+systemctl_bin="\$(command -v systemctl)"
+if command -v systemd-run >/dev/null 2>&1; then
+  unit_name="${APP_NAME}-web-restart-\$(date +%s)"
+  exec systemd-run --quiet --on-active=2 --unit "\$unit_name" "\$systemctl_bin" restart "\$service_name"
+fi
+nohup sh -c "sleep 2; exec '\$systemctl_bin' restart '\$service_name'" >/dev/null 2>&1 &
+EOF
+  chown root:root "$RESTART_HELPER"
+  chmod 0755 "$RESTART_HELPER"
+  cat > "$SUDOERS_FILE" <<EOF
+aiquota ALL=(root) NOPASSWD: ${RESTART_HELPER}
+EOF
+  chown root:root "$SUDOERS_FILE"
+  chmod 0440 "$SUDOERS_FILE"
+  visudo -cf "$SUDOERS_FILE" >/dev/null
+}
+
 update_current_system() {
   require_root
-  if [ ! -x "$INSTALL_DIR/.venv/bin/ai-quota-monitor-update" ]; then
+  if [ ! -x "$INSTALL_DIR/.venv/bin/${APP_NAME}-update" ]; then
     printf 'No existing install found at %s\n' "$INSTALL_DIR" >&2
     exit 1
   fi
-  "$INSTALL_DIR/.venv/bin/ai-quota-monitor-update" --yes --restart --deployment-mode proxmox
+  ensure_git_safe_directory
+  install_update_wrappers
+  install_restart_helper
+  "$UPDATE_WRAPPER" --yes --restart --deployment-mode proxmox
 }
 
 install_into_created_lxc() {

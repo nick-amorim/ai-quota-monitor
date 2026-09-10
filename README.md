@@ -139,6 +139,21 @@ Update an existing native/Proxmox install:
 ai-quota-monitor-update --yes --restart
 ```
 
+If a restricted shell does not include `/usr/local/bin` in `PATH`, the installer also exposes the updater from `/usr/bin` and the venv:
+
+```bash
+/usr/bin/ai-quota-monitor-update --yes --restart
+/opt/ai-quota-monitor/.venv/bin/ai-quota-monitor-update --yes --restart
+```
+
+The updater loads `/etc/ai-quota-monitor.env` before backing up the database, running migrations, or restarting the service.
+
+For an older existing LXC, rerun the installer once as root to refresh the updater wrappers, Git ownership trust, and dashboard restart helper:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/nick-amorim/ai-quota-monitor/main/scripts/proxmox/install-lxc.sh) --existing
+```
+
 Runtime layout:
 
 ```text

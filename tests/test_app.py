@@ -197,6 +197,8 @@ def test_dashboard_shell_renders(tmp_path):
     assert "Mon-Fri 05:00, 10:00, 15:00, 20:00" in response.text
     assert "Deployment and updates" in response.text
     assert "Check update plan" in response.text
+    assert "data-system-update-form" in response.text
+    assert "data-system-update-result" in response.text
     assert 'data-theme-toggle' in response.text
     assert 'data-drawer-open="global-settings-drawer"' in response.text
     assert 'id="global-settings-drawer"' in response.text

@@ -495,6 +495,75 @@ h4 {
   gap: 0.5rem;
 }
 
+.system-update-result {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.system-update-result[hidden] {
+  display: none;
+}
+
+.system-update-result--error {
+  border-color: var(--destructive-border);
+}
+
+.system-update-result p,
+.system-update-result ol {
+  margin: 0;
+}
+
+.system-update-result ol {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0;
+  list-style: none;
+}
+
+.system-update-step {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.55rem;
+  border-left: 3px solid var(--border);
+  background: var(--surface-raised);
+}
+
+.system-update-step--success {
+  border-left-color: var(--success);
+}
+
+.system-update-step--warning {
+  border-left-color: var(--warning);
+}
+
+.system-update-step--error {
+  border-left-color: var(--destructive);
+}
+
+.system-update-step span {
+  color: var(--muted-foreground);
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.system-update-step strong {
+  font-size: 0.8rem;
+  text-transform: capitalize;
+}
+
+.system-update-step small,
+.system-update-step code {
+  overflow-wrap: anywhere;
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
 .appbar-actions {
   justify-content: flex-end;
 }

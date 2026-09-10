@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if command -v ai-quota-monitor-update >/dev/null 2>&1; then
-  exec ai-quota-monitor-update "$@"
+APP_NAME="ai-quota-monitor"
+ENV_FILE="${AI_QUOTA_MONITOR_ENV_FILE:-/etc/${APP_NAME}.env}"
+INSTALL_DIR="/opt/${APP_NAME}"
+
+if [ -r "$ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "$ENV_FILE"
+  set +a
 fi
 
-exec /opt/ai-quota-monitor/.venv/bin/ai-quota-monitor-update "$@"
+INSTALL_DIR="${AI_QUOTA_MONITOR_INSTALL_DIR:-$INSTALL_DIR}"
+exec "$INSTALL_DIR/.venv/bin/${APP_NAME}-update" "$@"

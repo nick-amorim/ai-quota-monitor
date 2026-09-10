@@ -119,6 +119,14 @@ Preferred update command:
 ai-quota-monitor-update --yes --restart
 ```
 
+The installer creates root-owned command wrappers in `/usr/local/bin` and `/usr/bin`, so the command works from normal root shells and minimal `pct enter` environments. If needed, use the explicit fallback:
+
+```bash
+/usr/bin/ai-quota-monitor-update --yes --restart
+```
+
+The wrapper and Python updater load `/etc/ai-quota-monitor.env` before resolving database, data, backup, install, deployment, or restart settings. Production Proxmox backups therefore use `/var/lib/ai-quota-monitor`, not the development fallback under `./data`.
+
 Dry run:
 
 ```bash
@@ -142,7 +150,18 @@ Aliases:
 
 ```bash
 quotapilot-update --yes --restart
-update --yes --restart
 ```
 
-`ai-quota-monitor-update` is the preferred explicit command name.
+`ai-quota-monitor-update` is the preferred explicit command name. The generic `update` Python entry point exists only inside the virtual environment and should not be used as the documented administrative command.
+
+For older existing LXCs, rerun the installer once as root to refresh the command wrappers, Git safe-directory configuration, and web restart helper:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/nick-amorim/ai-quota-monitor/main/scripts/proxmox/install-lxc.sh) --existing
+```
+
+The installer's `--update` mode performs the same local wrapper/helper refresh before delegating to the updater:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/nick-amorim/ai-quota-monitor/main/scripts/proxmox/install-lxc.sh) --update
+```

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 from ai_quota_monitor.config import Settings, get_settings
 from ai_quota_monitor.services.system import SystemService
@@ -18,8 +21,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--data-dir", type=Path, help="Runtime data directory.")
     parser.add_argument("--backup-dir", type=Path, help="Database backup directory.")
     parser.add_argument("--deployment-mode", help="Override deployment mode: native, proxmox, docker, or auto.")
+    parser.add_argument(
+        "--env-file",
+        type=Path,
+        default=Path("/etc/ai-quota-monitor.env"),
+        help="Environment file to load before resolving deployment settings.",
+    )
     args = parser.parse_args(argv)
 
+    _load_env_file(args.env_file)
     settings = _settings_from_args(args)
     if not args.dry_run and not args.yes:
         answer = input("Type update to run the ai-quota-monitor updater: ").strip()
@@ -45,6 +55,14 @@ def _settings_from_args(args: argparse.Namespace) -> Settings:
         if value is not None:
             overrides[key] = value
     return Settings(**overrides)
+
+
+def _load_env_file(path: Path) -> None:
+    if not path.exists():
+        return
+    load_dotenv(path, override=False)
+    if str(path) != ".env":
+        os.environ.setdefault("AI_QUOTA_MONITOR_ENV_FILE", str(path))
 
 
 if __name__ == "__main__":

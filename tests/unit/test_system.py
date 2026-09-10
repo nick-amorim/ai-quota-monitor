@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ai_quota_monitor.config import Settings
+import ai_quota_monitor.services.system as system_module
 from ai_quota_monitor.services.system import (
     CommandResult,
     SystemService,
@@ -70,6 +71,27 @@ def test_update_dry_run_plans_backup_and_shared_update_commands(tmp_path):
     ]
     assert ["git", "status", "--porcelain"] in runner.commands
     assert result.steps[-1].command == ["systemctl", "restart", "ai-quota-monitor"]
+
+
+def test_proxmox_web_update_uses_sudo_restart_helper(tmp_path, monkeypatch):
+    helper_dir = tmp_path / "sbin"
+    helper_dir.mkdir()
+    helper = helper_dir / "ai-quota-monitor-restart"
+    helper.write_text("#!/bin/sh\n", encoding="utf-8")
+    runner = FakeRunner()
+    settings = make_settings(tmp_path, deployment_mode="proxmox")
+    monkeypatch.setattr(system_module, "RESTART_HELPER_DIR", helper_dir)
+    monkeypatch.setattr(system_module, "_is_root", lambda: False)
+    monkeypatch.setattr(
+        system_module.shutil,
+        "which",
+        lambda name: "/usr/bin/sudo" if name == "sudo" else None,
+    )
+
+    result = SystemService(settings, runner=runner).update(dry_run=True, restart=True)
+
+    assert result.steps[-1].name == "restart"
+    assert result.steps[-1].command == ["/usr/bin/sudo", "-n", str(helper)]
 
 
 def test_update_refuses_dirty_checkout_before_running_commands(tmp_path):
