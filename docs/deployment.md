@@ -120,6 +120,7 @@ Dashboard flow:
 3. If an update is available and the checkout can fast-forward cleanly, click **Install update**.
 
 Real dashboard installs are disabled unless `AI_QUOTA_MONITOR_ENABLE_WEB_UPDATES=true`. Docker deployments should use Compose updates instead of dashboard installs.
+Dashboard and CLI updates ignore untracked Git files during the safety check, so generated caches or local runtime scratch files do not block a safe fast-forward. Tracked local changes still block updates.
 
 Preferred update command:
 
@@ -169,7 +170,7 @@ For older existing LXCs, rerun the installer once as root to refresh the command
 bash <(curl -fsSL https://raw.githubusercontent.com/nick-amorim/ai-quota-monitor/main/scripts/proxmox/install-lxc.sh) --existing
 ```
 
-The installer's `--update` mode performs the same local wrapper/helper refresh before delegating to the updater. It also ensures `sudo` and `/etc/sudoers.d` exist before installing the dashboard restart helper:
+The installer's `--update` mode performs the same local wrapper/helper refresh before delegating to the updater. It also ensures `sudo` and `/etc/sudoers.d` exist before installing the dashboard restart helper, then bootstraps the Git checkout with a tracked-only fast-forward so older updater versions can recover from untracked install artifacts:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/nick-amorim/ai-quota-monitor/main/scripts/proxmox/install-lxc.sh) --update

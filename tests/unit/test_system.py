@@ -19,6 +19,7 @@ class FakeRunner:
         self,
         *,
         dirty: bool = False,
+        untracked: bool = False,
         fail_command: str | None = None,
         fail_stderr: str = "failed",
         current_commit: str = "abc123",
@@ -27,6 +28,7 @@ class FakeRunner:
     ):
         self.commands: list[list[str]] = []
         self.dirty = dirty
+        self.untracked = untracked
         self.fail_command = fail_command
         self.fail_stderr = fail_stderr
         self.current_commit = current_commit
@@ -38,7 +40,11 @@ class FakeRunner:
         if self.fail_command and self.fail_command in command:
             return CommandResult(command=command, returncode=1, stderr=self.fail_stderr)
         if command == ["git", "status", "--porcelain"]:
-            stdout = " M README.md\n" if self.dirty else ""
+            stdout = ""
+            if self.dirty:
+                stdout += " M README.md\n"
+            if self.untracked:
+                stdout += "?? ai_quota_monitor.egg-info/\n"
             return CommandResult(command=command, returncode=0, stdout=stdout)
         if command == ["git", "status", "--porcelain", "--untracked-files=no"]:
             stdout = " M README.md\n" if self.dirty else ""
@@ -98,7 +104,7 @@ def test_update_dry_run_plans_backup_and_shared_update_commands(tmp_path):
         "migrate",
         "restart",
     ]
-    assert ["git", "status", "--porcelain"] in runner.commands
+    assert ["git", "status", "--porcelain", "--untracked-files=no"] in runner.commands
     assert result.steps[-1].status == "skipped"
     assert "restart helper" in result.steps[-1].detail
 
@@ -256,7 +262,21 @@ def test_update_refuses_dirty_checkout_before_running_commands(tmp_path):
     assert result.changed is False
     assert result.message == "Update refused because the checkout is dirty."
     assert [step.name for step in result.steps] == ["backup", "worktree"]
+    assert "README.md" in result.steps[-1].detail
+    assert ["git", "status", "--porcelain", "--untracked-files=no"] in runner.commands
     assert not any(command[:2] == ["git", "merge"] for command in runner.commands)
+
+
+def test_update_ignores_untracked_checkout_files(tmp_path):
+    runner = FakeRunner(untracked=True)
+    settings = make_settings(tmp_path, deployment_mode="proxmox")
+
+    result = SystemService(settings, runner=runner).update(dry_run=False)
+
+    assert result.changed is True
+    assert result.message == "Update completed."
+    assert ["git", "merge", "--ff-only", "origin/main"] in runner.commands
+    assert ["git", "status", "--porcelain", "--untracked-files=no"] in runner.commands
 
 
 def test_update_copies_sqlite_database_before_migrations(tmp_path):
