@@ -18,7 +18,11 @@ def test_restart_helper_install_creates_sudoers_directory_and_sudo_dependency():
 def test_update_mode_bootstraps_checkout_with_tracked_only_status():
     content = SCRIPT.read_text(encoding="utf-8")
 
+    assert "--repair-checkout" in content
     assert "bootstrap_checkout_update()" in content
     assert "git -C \"$INSTALL_DIR\" status --porcelain --untracked-files=no" in content
+    assert "git -C \"$INSTALL_DIR\" diff --binary HEAD > \"$patch_file\"" in content
+    assert "git -C \"$INSTALL_DIR\" restore --source=HEAD --staged --worktree ." in content
+    assert "--update --repair-checkout" in content
     assert "git -C \"$INSTALL_DIR\" merge --ff-only \"origin/${BRANCH}\"" in content
     assert "repair_install_ownership\n  bootstrap_checkout_update\n  \"$UPDATE_WRAPPER\"" in content

@@ -25,17 +25,19 @@ RESTART_HELPER="/usr/local/sbin/${APP_NAME}-restart"
 SUDOERS_FILE="/etc/sudoers.d/${APP_NAME}-restart"
 MODE="default"
 YES="false"
+REPAIR_CHECKOUT="false"
 
 usage() {
   printf '%s\n' \
-    "Usage: install-lxc.sh [--advanced] [--yes] [--existing] [--update] [--ct-id ID]" \
+    "Usage: install-lxc.sh [--advanced] [--yes] [--existing] [--update] [--repair-checkout] [--ct-id ID]" \
     "" \
     "Modes:" \
     "  default       Create a Proxmox LXC when pct is available, then install the app." \
     "  --advanced    Prompt for CT resources before creating the LXC." \
     "  --yes         Non-interactive mode; requires AI_QUOTA_MONITOR_CT_ID or --ct-id on Proxmox hosts." \
     "  --existing    Install into the current Debian/Ubuntu system." \
-    "  --update      Update an existing install in the current system."
+    "  --update      Update an existing install in the current system." \
+    "  --repair-checkout  With --update, save a patch backup and discard tracked local checkout changes."
 }
 
 while [ "$#" -gt 0 ]; do
@@ -44,6 +46,7 @@ while [ "$#" -gt 0 ]; do
     --yes|--non-interactive) YES="true" ;;
     --existing) MODE="existing" ;;
     --update) MODE="update" ;;
+    --repair-checkout) REPAIR_CHECKOUT="true" ;;
     --ct-id)
       shift
       CT_ID="${1:-}"
@@ -219,15 +222,31 @@ repair_install_ownership() {
 }
 
 bootstrap_checkout_update() {
+  local patch_file
   local tracked_status
   ensure_git_safe_directory
+  git -C "$INSTALL_DIR" fetch origin
+  tracked_status="$(git -C "$INSTALL_DIR" status --porcelain --untracked-files=no)"
+  if [ -n "$tracked_status" ]; then
+    if [ "$REPAIR_CHECKOUT" = "true" ]; then
+      mkdir -p "${DATA_DIR}/backups"
+      patch_file="${DATA_DIR}/backups/checkout-repair-$(date -u +%Y%m%d-%H%M%S).patch"
+      git -C "$INSTALL_DIR" diff --binary HEAD > "$patch_file"
+      git -C "$INSTALL_DIR" restore --source=HEAD --staged --worktree .
+      printf 'Tracked checkout changes were saved to %s and restored to HEAD.\n' "$patch_file"
+    else
+      printf 'Update refused because the checkout has tracked local changes:\n' >&2
+      printf '%s\n' "$tracked_status" >&2
+      printf 'Review the changes, or rerun with --update --repair-checkout to save a patch backup and restore tracked files.\n' >&2
+      exit 1
+    fi
+  fi
   tracked_status="$(git -C "$INSTALL_DIR" status --porcelain --untracked-files=no)"
   if [ -n "$tracked_status" ]; then
     printf 'Update refused because the checkout has tracked local changes:\n' >&2
     printf '%s\n' "$tracked_status" >&2
     exit 1
   fi
-  git -C "$INSTALL_DIR" fetch origin
   git -C "$INSTALL_DIR" merge --ff-only "origin/${BRANCH}"
 }
 
