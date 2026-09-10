@@ -218,6 +218,19 @@ repair_install_ownership() {
   chmod +x "$INSTALL_DIR/scripts/update.sh"
 }
 
+bootstrap_checkout_update() {
+  local tracked_status
+  ensure_git_safe_directory
+  tracked_status="$(git -C "$INSTALL_DIR" status --porcelain --untracked-files=no)"
+  if [ -n "$tracked_status" ]; then
+    printf 'Update refused because the checkout has tracked local changes:\n' >&2
+    printf '%s\n' "$tracked_status" >&2
+    exit 1
+  fi
+  git -C "$INSTALL_DIR" fetch origin
+  git -C "$INSTALL_DIR" merge --ff-only "origin/${BRANCH}"
+}
+
 update_current_system() {
   require_root
   if [ ! -x "$INSTALL_DIR/.venv/bin/${APP_NAME}-update" ]; then
@@ -228,6 +241,7 @@ update_current_system() {
   install_update_wrappers
   install_restart_helper
   repair_install_ownership
+  bootstrap_checkout_update
   "$UPDATE_WRAPPER" --yes --restart --deployment-mode proxmox
   repair_install_ownership
 }

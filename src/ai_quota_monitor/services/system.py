@@ -87,7 +87,10 @@ class SystemService:
                 f"{self.settings.update_remote}/{self.settings.update_branch}",
             ],
         )
-        dirty_result = self.runner(["git", "status", "--porcelain"], self._cwd())
+        dirty_result = self.runner(
+            ["git", "status", "--porcelain", "--untracked-files=no"],
+            self._cwd(),
+        )
         dirty = (
             bool(dirty_result.stdout.strip())
             if dirty_result.returncode == 0
@@ -169,7 +172,10 @@ class SystemService:
                     detail=f"Database file does not exist yet: {database_path}",
                 )
 
-        dirty_result = self.runner(["git", "status", "--porcelain"], self._cwd())
+        dirty_result = self.runner(
+            ["git", "status", "--porcelain", "--untracked-files=no"],
+            self._cwd(),
+        )
         if dirty_result.returncode != 0:
             steps.append(
                 UpdateStep(
@@ -187,12 +193,17 @@ class SystemService:
                 message="Unable to inspect the Git worktree.",
                 steps=steps,
             )
-        if dirty_result.stdout.strip():
+        changed_files = _changed_files(dirty_result.stdout)
+        if changed_files:
+            detail = (
+                "The application checkout has tracked local changes: "
+                f"{', '.join(changed_files)}."
+            )
             steps.append(
                 UpdateStep(
                     name="worktree",
                     status="failed",
-                    detail="The application checkout has uncommitted changes.",
+                    detail=detail,
                     command=dirty_result.command,
                 ),
             )
