@@ -126,7 +126,7 @@ class CodexAuthManager:
 
     def start_device_login(self, account_id: int) -> LoginSnapshot:
         with self._session_factory() as session:
-            account = session.get(Account, account_id)
+            account = self._active_account(session, account_id)
             if account is None:
                 raise KeyError(account_id)
 
@@ -184,7 +184,7 @@ class CodexAuthManager:
 
     def refresh_status(self, account_id: int) -> CodexAccountInfo:
         with self._session_factory() as session:
-            account = session.get(Account, account_id)
+            account = self._active_account(session, account_id)
             if account is None:
                 raise KeyError(account_id)
 
@@ -209,7 +209,7 @@ class CodexAuthManager:
             login.attempt.cancel()
 
         with self._session_factory() as session:
-            account = session.get(Account, account_id)
+            account = self._active_account(session, account_id)
             if account is None:
                 raise KeyError(account_id)
 
@@ -231,7 +231,7 @@ class CodexAuthManager:
         try:
             completed = attempt.wait()
             with self._session_factory() as session:
-                account = session.get(Account, account_id)
+                account = self._active_account(session, account_id)
                 if account is None:
                     return
 
@@ -256,7 +256,7 @@ class CodexAuthManager:
 
     def _update_status(self, account_id: int, auth_status: str) -> None:
         with self._session_factory() as session:
-            account = session.get(Account, account_id)
+            account = self._active_account(session, account_id)
             if account is None:
                 return
             account.auth_status = auth_status
@@ -288,11 +288,20 @@ class CodexAuthManager:
             duplicate = session.scalar(
                 select(Account).where(
                     Account.id != account.id,
+                    Account.archived_at.is_(None),
                     Account.account_external_id == info.external_id,
                 )
             )
             if duplicate is not None:
                 account.auth_status = "duplicate_account"
+
+    def _active_account(self, session: Session, account_id: int) -> Account | None:
+        return session.scalar(
+            select(Account).where(
+                Account.id == account_id,
+                Account.archived_at.is_(None),
+            )
+        )
 
 
 class OpenAiCodexAuthBackend:

@@ -13,12 +13,19 @@ from fastapi.templating import Jinja2Templates
 from ai_quota_monitor import __version__
 from ai_quota_monitor.services.accounts import (
     WEEKDAYS,
+    archive_account,
+    create_account,
     get_account,
     list_accounts,
     update_account_schedule,
 )
 from ai_quota_monitor.services.anchors import get_app_setting, update_app_setting
-from ai_quota_monitor.services.events import EventFilters, list_events, recent_events
+from ai_quota_monitor.services.events import (
+    EventFilters,
+    list_events,
+    recent_events,
+    record_event,
+)
 from ai_quota_monitor.services.monitor import (
     MonitorView,
     build_monitor_view,
@@ -140,7 +147,7 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
         selected_category = (query.get("category") or "").strip() or None
 
         with session_factory() as session:
-            accounts = list_accounts(session)
+            accounts = list_accounts(session, include_archived=True)
 
         events = list_events(
             session_factory,
@@ -388,6 +395,74 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
         request.app.state.rate_limit_listener.reload()
         return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
 
+    @router.post("/accounts")
+    async def add_account(request: Request) -> RedirectResponse:
+        form = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
+        session_factory = request.app.state.session_factory
+
+        try:
+            with session_factory() as session:
+                account = create_account(
+                    session,
+                    request.app.state.settings,
+                    name=_optional(form, "name"),
+                    enabled=_checkbox(form, "enabled"),
+                    daily_anchor_enabled=_checkbox(form, "daily_anchor_enabled"),
+                    daily_anchor_time=_parse_time(_required(form, "daily_anchor_time")),
+                    weekly_target_day=_required(form, "weekly_target_day"),
+                    weekly_target_time=_parse_time(_required(form, "weekly_target_time")),
+                    timezone=_required(form, "timezone"),
+                    active_weekdays={
+                        weekday
+                        for weekday in WEEKDAYS
+                        if _checkbox(form, f"{weekday}_enabled")
+                    },
+                    skip_if_window_active=_checkbox(form, "skip_if_window_active"),
+                )
+                record_event(
+                    session,
+                    level="info",
+                    category="account.created",
+                    message="Account created",
+                    account_id=account.id,
+                    payload={"slug": account.slug},
+                )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from None
+
+        request.app.state.quota_scheduler.reload()
+        request.app.state.rate_limit_listener.reload()
+        return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+
+    @router.post("/accounts/{account_id}/archive")
+    async def archive_dashboard_account(
+        account_id: int,
+        request: Request,
+    ) -> RedirectResponse:
+        request.app.state.auth_manager.cancel_device_login(account_id)
+        session_factory = request.app.state.session_factory
+
+        with session_factory() as session:
+            account = get_account(session, account_id)
+            if account is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+            archive_account(session, account)
+            record_event(
+                session,
+                level="info",
+                category="account.archived",
+                message="Account archived",
+                account_id=account.id,
+                payload={"slug": account.slug},
+            )
+
+        request.app.state.quota_scheduler.reload()
+        request.app.state.rate_limit_listener.reload()
+        return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+
     @router.post("/accounts/{account_id}/auth/device-login")
     async def start_device_login(account_id: int, request: Request) -> RedirectResponse:
         try:
@@ -482,6 +557,11 @@ def _required(form: dict[str, list[str]], key: str) -> str:
             detail=f"{key} is required",
         )
     return value
+
+
+def _optional(form: dict[str, list[str]], key: str) -> str | None:
+    value = form.get(key, [""])[0].strip()
+    return value or None
 
 
 def _checkbox(form: dict[str, list[str]], key: str) -> bool:

@@ -22,14 +22,16 @@ http://127.0.0.1:8080
 
 ## Accounts
 
-The app seeds two accounts:
+The app starts with two seeded account profiles for compatibility with existing installations:
 
 | Account | Default daily anchor | Default weekly target |
 | --- | ---: | --- |
 | Account A | 05:00 | Monday 05:00 |
 | Account B | 09:00 | Wednesday 09:00 |
 
-Each account has independent Codex runtime state. Account authentication is checked and stored as metadata only. The app does not store account credentials or OAuth tokens in SQLite.
+Additional accounts can be created from **Settings -> Add account**. Each account has independent Codex runtime state under its own `codex-home` and `workspace` directories. Account authentication is checked and stored as metadata only. The app does not store account credentials or OAuth tokens in SQLite.
+
+Accounts can be archived from the account's `Settings` drawer. Archiving hides the account and stops scheduled anchors, telemetry polling, and live listeners for it, but preserves database history and runtime files.
 
 ## Authentication Flow
 
@@ -37,9 +39,9 @@ Each account has independent Codex runtime state. Account authentication is chec
 2. Use `Login` for one account.
 3. Complete the Codex ChatGPT device-code flow.
 4. Wait for the account card to update automatically, or use `Refresh auth` to force an account metadata check.
-5. Repeat for the second account.
+5. Repeat for each account.
 
-If both configured accounts resolve to the same Codex account identity, the later refreshed account is marked as `duplicate_account`.
+If two active account profiles resolve to the same Codex account identity, the later refreshed account is marked as `duplicate_account`.
 
 ## Quota Telemetry
 
@@ -104,6 +106,7 @@ Single-account views:
 ```text
 http://127.0.0.1:8080/monitor/account-a
 http://127.0.0.1:8080/monitor/account-b
+http://127.0.0.1:8080/monitor/account-3
 ```
 
 The monitor is dark-only and optimized for small always-on screens. It uses the dashboard refresh interval and shows:

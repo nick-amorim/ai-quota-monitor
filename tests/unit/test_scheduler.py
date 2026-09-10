@@ -10,7 +10,7 @@ from ai_quota_monitor.database import (
 )
 from ai_quota_monitor.migrations import run_migrations
 from ai_quota_monitor.models import Account, EventLog
-from ai_quota_monitor.services.accounts import seed_defaults
+from ai_quota_monitor.services.accounts import archive_account, create_account, seed_defaults
 from ai_quota_monitor.services.anchors import AnchorAlreadyRunningError, update_app_setting
 from ai_quota_monitor.services.scheduler import QuotaScheduler, daily_anchor_times
 from ai_quota_monitor.services.smart_anchors import SmartAnchorResult
@@ -99,6 +99,38 @@ def test_scheduler_creates_database_driven_daily_and_weekly_jobs(tmp_path):
             events = session.query(EventLog).all()
 
         assert any(event.message == "Scheduler jobs reloaded" for event in events)
+    finally:
+        scheduler.shutdown()
+        engine.dispose()
+
+
+def test_scheduler_reload_adds_created_accounts_and_skips_archived(tmp_path):
+    engine, session_factory, scheduler, _ = make_scheduler(tmp_path)
+
+    try:
+        with session_factory() as session:
+            created = create_account(
+                session,
+                scheduler._settings,
+                name="Work",
+                daily_anchor_time=time(13, 0),
+                weekly_target_day="thursday",
+                weekly_target_time=time(14, 0),
+            )
+            created.auth_status = "connected"
+            first = session.get(Account, 1)
+            assert first is not None
+            archive_account(session, first)
+            session.commit()
+
+        scheduler.reload()
+        jobs = scheduler.next_runs()
+        names = {job.account_name for job in jobs}
+
+        assert "Account A" not in names
+        assert "Account B" in names
+        assert "Work" in names
+        assert any(job.account_name == "Work" and job.kind == "weekly" for job in jobs)
     finally:
         scheduler.shutdown()
         engine.dispose()

@@ -1441,7 +1441,8 @@ fieldset {
 
 .toggle-group,
 .anchor-settings-form,
-.schedule-form {
+.schedule-form,
+.account-admin-form {
   display: grid;
   gap: 0.8rem;
 }

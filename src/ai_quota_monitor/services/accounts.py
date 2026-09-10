@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import time
+from datetime import UTC, datetime, time
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from ai_quota_monitor.config import Settings
@@ -73,7 +73,7 @@ def seed_defaults(session: Session, settings: Settings) -> None:
             session.add(AppSetting(key=key, value=value))
 
     data_root = settings.data_dir.expanduser().resolve()
-    for seed in default_account_seeds(settings):
+    for index, seed in enumerate(default_account_seeds(settings), start=1):
         account = session.scalar(select(Account).where(Account.slug == seed.slug))
         if account is None:
             account_root = data_root / seed.slug
@@ -81,11 +81,14 @@ def seed_defaults(session: Session, settings: Settings) -> None:
                 name=seed.name,
                 slug=seed.slug,
                 enabled=True,
+                sort_order=index,
                 codex_home=str(account_root / "codex-home"),
                 workspace_path=str(account_root / "workspace"),
             )
             session.add(account)
             session.flush()
+        elif account.sort_order == 0:
+            account.sort_order = index
 
         if account.schedule is None:
             session.add(
@@ -110,22 +113,96 @@ def seed_defaults(session: Session, settings: Settings) -> None:
     session.commit()
 
 
-def list_accounts(session: Session) -> list[Account]:
+def create_account(
+    session: Session,
+    settings: Settings,
+    *,
+    name: str | None = None,
+    enabled: bool = True,
+    daily_anchor_enabled: bool = True,
+    daily_anchor_time: time = time(9, 0),
+    weekly_target_day: str = "monday",
+    weekly_target_time: time = time(9, 0),
+    timezone: str | None = None,
+    active_weekdays: set[str] | None = None,
+    skip_if_window_active: bool = True,
+) -> Account:
+    if weekly_target_day not in WEEKDAYS:
+        raise ValueError("weekly_target_day must be a weekday")
+
+    if active_weekdays is None:
+        active_weekdays = {"monday", "tuesday", "wednesday", "thursday", "friday"}
+    invalid_weekdays = active_weekdays.difference(WEEKDAYS)
+    if invalid_weekdays:
+        raise ValueError(f"Invalid weekdays: {', '.join(sorted(invalid_weekdays))}")
+
+    number = _next_account_number(session)
+    slug = _unique_slug(session, f"account-{number}")
+    account_root = settings.data_dir.expanduser().resolve() / slug
+    account = Account(
+        name=(name or f"Account {number}").strip() or f"Account {number}",
+        slug=slug,
+        enabled=enabled,
+        sort_order=_next_sort_order(session),
+        codex_home=str(account_root / "codex-home"),
+        workspace_path=str(account_root / "workspace"),
+    )
+    account.schedule = AccountSchedule(
+        daily_anchor_enabled=daily_anchor_enabled,
+        daily_anchor_time=daily_anchor_time,
+        weekly_target_day=weekly_target_day,
+        weekly_target_time=weekly_target_time,
+        timezone=timezone or settings.timezone,
+        skip_if_window_active=skip_if_window_active,
+    )
+    for weekday in WEEKDAYS:
+        setattr(account.schedule, f"{weekday}_enabled", weekday in active_weekdays)
+
+    session.add(account)
+    session.commit()
+    session.refresh(account)
+    create_runtime_directories(account)
+    return account
+
+
+def archive_account(session: Session, account: Account) -> Account:
+    account.enabled = False
+    account.archived_at = datetime.now(UTC)
+    session.commit()
+    session.refresh(account)
+    return account
+
+
+def create_runtime_directories(account: Account) -> None:
+    for path in (account.codex_home, account.workspace_path):
+        Path(path).expanduser().mkdir(parents=True, exist_ok=True)
+
+
+def list_accounts(session: Session, *, include_archived: bool = False) -> list[Account]:
+    query = select(Account).options(selectinload(Account.schedule))
+    if not include_archived:
+        query = query.where(Account.archived_at.is_(None))
     return list(
         session.scalars(
-            select(Account)
-            .options(selectinload(Account.schedule))
-            .order_by(Account.slug)
+            query.order_by(Account.sort_order, Account.slug)
         )
     )
 
 
-def get_account(session: Session, account_id: int) -> Account | None:
-    return session.scalar(
+def get_account(
+    session: Session,
+    account_id: int,
+    *,
+    include_archived: bool = False,
+) -> Account | None:
+    query = (
         select(Account)
         .options(selectinload(Account.schedule))
         .where(Account.id == account_id)
     )
+    if not include_archived:
+        query = query.where(Account.archived_at.is_(None))
+    return session.scalar(query)
 
 
 def update_account_schedule(
@@ -174,9 +251,33 @@ def update_account_schedule(
     return account
 
 
-def ensure_runtime_directories(settings: Settings) -> None:
+def ensure_runtime_directories(settings: Settings, session: Session | None = None) -> None:
     data_root = settings.data_dir.expanduser().resolve()
-    for seed in default_account_seeds(settings):
-        account_root = data_root / seed.slug
-        for path in (account_root / "codex-home", account_root / "workspace"):
-            Path(path).mkdir(parents=True, exist_ok=True)
+    if session is None:
+        for seed in default_account_seeds(settings):
+            account_root = data_root / seed.slug
+            for path in (account_root / "codex-home", account_root / "workspace"):
+                Path(path).mkdir(parents=True, exist_ok=True)
+        return
+
+    for account in list_accounts(session, include_archived=True):
+        create_runtime_directories(account)
+
+
+def _next_account_number(session: Session) -> int:
+    max_id = session.scalar(select(func.max(Account.id))) or 0
+    return int(max_id) + 1
+
+
+def _next_sort_order(session: Session) -> int:
+    max_sort = session.scalar(select(func.max(Account.sort_order))) or 0
+    return int(max_sort) + 1
+
+
+def _unique_slug(session: Session, base: str) -> str:
+    candidate = base
+    suffix = 2
+    while session.scalar(select(Account.id).where(Account.slug == candidate)) is not None:
+        candidate = f"{base}-{suffix}"
+        suffix += 1
+    return candidate

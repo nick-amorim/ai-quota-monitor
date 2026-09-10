@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, time
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Time, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Time, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ai_quota_monitor.database import Base
@@ -15,6 +15,8 @@ class Account(Base):
     name: Mapped[str] = mapped_column(String(80), nullable=False)
     slug: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     codex_home: Mapped[str] = mapped_column(String(500), nullable=False)
     workspace_path: Mapped[str] = mapped_column(String(500), nullable=False)

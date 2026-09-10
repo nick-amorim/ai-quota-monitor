@@ -71,7 +71,7 @@ def create_app(
         session_factory = create_session_factory(engine)
         with session_factory() as session:
             seed_defaults(session, app_settings)
-        ensure_runtime_directories(app_settings)
+            ensure_runtime_directories(app_settings, session)
         app.state.settings = app_settings
         app.state.engine = engine
         app.state.session_factory = session_factory

@@ -129,7 +129,10 @@ class SmartAnchorService:
             account = session.scalar(
                 select(Account)
                 .options(selectinload(Account.schedule))
-                .where(Account.id == account_id)
+                .where(
+                    Account.id == account_id,
+                    Account.archived_at.is_(None),
+                )
             )
             if account is None:
                 raise KeyError(account_id)
