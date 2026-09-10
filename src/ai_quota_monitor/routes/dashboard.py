@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import UTC, datetime, time
+from pathlib import Path
 from urllib.parse import parse_qs
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -31,10 +32,13 @@ DASHBOARD_REFRESH_MIN_SECONDS = 5
 DASHBOARD_REFRESH_MAX_SECONDS = 300
 USAGE_POLL_MIN_MINUTES = 1
 USAGE_POLL_MAX_MINUTES = 240
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
+STATIC_ASSET_NAMES = ("app.css", "app.js")
 
 
 def register_routes(templates: Jinja2Templates) -> APIRouter:
     router = APIRouter()
+    templates.env.globals.setdefault("static_asset_version", static_asset_version)
 
     @router.get("/", response_class=HTMLResponse)
     async def dashboard(request: Request) -> HTMLResponse:
@@ -654,6 +658,17 @@ def _template_helpers(request: Request) -> dict[str, object]:
         "format_time": lambda value: format_local_time(value, timezone),
         "account_label": _account_label,
     }
+
+
+def static_asset_version() -> str:
+    versions: list[int] = []
+    for name in STATIC_ASSET_NAMES:
+        path = PACKAGE_DIR / "static" / name
+        try:
+            versions.append(path.stat().st_mtime_ns)
+        except OSError:
+            continue
+    return str(max(versions)) if versions else __version__
 
 
 def _account_label(account) -> str:

@@ -207,7 +207,6 @@
               type="button"
               data-system-update-run
               data-update-url="/api/system/update"
-              {% if not system_info.web_updates_enabled or system_info.deployment_mode == "docker" %}disabled{% endif %}
               hidden
             >
               Install update
