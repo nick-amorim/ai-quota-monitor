@@ -215,6 +215,87 @@
           <div class="system-update-result" data-system-update-result role="status" aria-live="polite" hidden></div>
         </section>
 
+        <section class="settings-panel" aria-labelledby="new-account-title">
+          <div>
+            <p class="eyebrow">Accounts</p>
+            <h3 id="new-account-title">Add account</h3>
+          </div>
+          <form method="post" action="/accounts" class="schedule-form">
+            <label>
+              <span>Internal label</span>
+              <input
+                type="text"
+                name="name"
+                maxlength="80"
+                placeholder="Optional"
+              >
+              <small>The dashboard uses the Codex email after login.</small>
+            </label>
+
+            <label class="check-row">
+              <input type="checkbox" name="enabled" checked>
+              <span>Account enabled</span>
+            </label>
+
+            <div class="form-grid">
+              <label>
+                <span>Daily anchor</span>
+                <input type="time" name="daily_anchor_time" value="09:00" required>
+              </label>
+
+              <label>
+                <span>Weekly day</span>
+                <select name="weekly_target_day" required>
+                  {% for weekday in weekdays %}
+                  <option value="{{ weekday }}" {% if weekday == "monday" %}selected{% endif %}>
+                    {{ weekday | title }}
+                  </option>
+                  {% endfor %}
+                </select>
+              </label>
+
+              <label>
+                <span>Weekly time</span>
+                <input type="time" name="weekly_target_time" value="09:00" required>
+              </label>
+
+              <label>
+                <span>Timezone</span>
+                <input type="text" name="timezone" value="{{ timezone }}" required>
+              </label>
+            </div>
+
+            <fieldset>
+              <legend>Run days</legend>
+              <div class="weekday-grid">
+                {% for weekday in weekdays %}
+                <label class="check-row">
+                  <input
+                    type="checkbox"
+                    name="{{ weekday }}_enabled"
+                    {% if weekday in ["monday", "tuesday", "wednesday", "thursday", "friday"] %}checked{% endif %}
+                  >
+                  <span>{{ weekday[:3] | title }}</span>
+                </label>
+                {% endfor %}
+              </div>
+            </fieldset>
+
+            <div class="toggle-group">
+              <label class="check-row">
+                <input type="checkbox" name="daily_anchor_enabled" checked>
+                <span>Daily anchor enabled</span>
+              </label>
+              <label class="check-row">
+                <input type="checkbox" name="skip_if_window_active" checked>
+                <span>Skip when a 5h window is active</span>
+              </label>
+            </div>
+
+            <button type="submit">Add account</button>
+          </form>
+        </section>
+
         <section class="settings-panel" aria-labelledby="global-runtime-title">
           <div>
             <p class="eyebrow">Runtime</p>
@@ -368,6 +449,17 @@
             </div>
 
             <button type="submit">Save schedule</button>
+          </form>
+        </section>
+
+        <section class="settings-panel" aria-labelledby="account-lifecycle-title-{{ account.id }}">
+          <div>
+            <p class="eyebrow">Account</p>
+            <h3 id="account-lifecycle-title-{{ account.id }}">Lifecycle</h3>
+          </div>
+          <form method="post" action="/accounts/{{ account.id }}/archive" class="account-admin-form">
+            <p class="panel-note">Archive hides this account and stops scheduled work. History and runtime files are preserved.</p>
+            <button type="submit" class="danger-button">Archive account</button>
           </form>
         </section>
       </div>

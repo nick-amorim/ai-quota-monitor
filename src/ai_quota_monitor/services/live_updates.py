@@ -4,11 +4,11 @@ import threading
 import logging
 from collections.abc import Callable
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ai_quota_monitor.config import Settings
 from ai_quota_monitor.models import Account
+from ai_quota_monitor.services.accounts import list_accounts
 from ai_quota_monitor.services.app_server import (
     CodexAppServerClient,
     CodexAppServerNotification,
@@ -50,14 +50,11 @@ class RateLimitUpdateListener:
             return
 
         with self._session_factory() as session:
-            accounts = list(
-                session.scalars(
-                    select(Account).where(
-                        Account.enabled.is_(True),
-                        Account.auth_status == "connected",
-                    )
-                )
-            )
+            accounts = [
+                account
+                for account in list_accounts(session)
+                if account.enabled and account.auth_status == "connected"
+            ]
 
         wanted_ids = {account.id for account in accounts}
         with self._lock:

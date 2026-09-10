@@ -92,7 +92,12 @@ class AnchorService:
 
     def _load_anchor_inputs(self, account_id: int) -> tuple[Account, str]:
         with self._session_factory() as session:
-            account = session.get(Account, account_id)
+            account = session.scalar(
+                select(Account).where(
+                    Account.id == account_id,
+                    Account.archived_at.is_(None),
+                )
+            )
             if account is None:
                 raise KeyError(account_id)
 

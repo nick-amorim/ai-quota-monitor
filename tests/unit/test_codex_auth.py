@@ -11,7 +11,7 @@ from ai_quota_monitor.database import (
 )
 from ai_quota_monitor.migrations import run_migrations
 from ai_quota_monitor.models import Account
-from ai_quota_monitor.services.accounts import list_accounts, seed_defaults
+from ai_quota_monitor.services.accounts import archive_account, list_accounts, seed_defaults
 from ai_quota_monitor.services.codex_auth import (
     CodexAccountInfo,
     CodexAuthManager,
@@ -141,6 +141,27 @@ def test_refresh_status_detects_duplicate_account_identity(tmp_path):
 
     assert account_b is not None
     assert account_b.auth_status == "duplicate_account"
+    engine.dispose()
+
+
+def test_refresh_status_ignores_archived_duplicate_identity(tmp_path):
+    backend = FakeBackend()
+    engine, session_factory, manager = make_manager(tmp_path, backend)
+
+    with session_factory() as session:
+        accounts = list_accounts(session)
+        accounts[0].account_external_id = "user@example.test"
+        accounts[0].account_display = "user@example.test"
+        accounts[0].auth_status = "connected"
+        archive_account(session, accounts[0])
+
+    manager.refresh_status(2)
+
+    with session_factory() as session:
+        account_b = session.get(Account, 2)
+
+    assert account_b is not None
+    assert account_b.auth_status == "connected"
     engine.dispose()
 
 

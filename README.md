@@ -1,12 +1,12 @@
 # ai-quota-monitor
 
-ai-quota-monitor is a self-hosted dashboard, scheduler, and small-screen monitor for two independently authenticated ChatGPT Plus/Codex accounts.
+ai-quota-monitor is a self-hosted dashboard, scheduler, and small-screen monitor for independently authenticated ChatGPT Plus/Codex accounts.
 
 It helps make Codex quota windows visible and predictable without OpenAI API keys, ChatGPT web scraping, or storing account credentials in the application database.
 
 ## What It Does
 
-- Tracks two account profiles, schedules, authentication state, and quota telemetry.
+- Tracks multiple account profiles, schedules, authentication state, and quota telemetry.
 - Shows a dark-first dashboard at `/` for account status, usage, events, schedules, and updates.
 - Provides a compact Raspberry Pi monitor at `/monitor` and `/monitor/{account_slug}`.
 - Refreshes connected-account usage automatically on the configured polling interval.

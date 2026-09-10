@@ -76,7 +76,12 @@ class TelemetryService:
 
     def refresh_account_usage(self, account_id: int) -> TelemetryRefreshResult:
         with self._session_factory() as session:
-            account = session.get(Account, account_id)
+            account = session.scalar(
+                select(Account).where(
+                    Account.id == account_id,
+                    Account.archived_at.is_(None),
+                )
+            )
             if account is None:
                 raise KeyError(account_id)
 
@@ -114,7 +119,10 @@ class TelemetryService:
             account = session.scalar(
                 select(Account)
                 .options(selectinload(Account.schedule))
-                .where(Account.id == account_id)
+                .where(
+                    Account.id == account_id,
+                    Account.archived_at.is_(None),
+                )
             )
             if account is None:
                 raise KeyError(account_id)

@@ -35,7 +35,7 @@ src/ai_quota_monitor/
 
 | Table | Purpose |
 | --- | --- |
-| `accounts` | Account names, slugs, auth status, metadata |
+| `accounts` | Account names, slugs, sort order, archive state, auth status, metadata |
 | `account_schedules` | Daily and weekly anchor schedule settings |
 | `anchor_runs` | Manual and scheduled anchor history |
 | `usage_raw` | Raw app-server telemetry payloads |
@@ -52,9 +52,19 @@ Each account uses separate runtime paths:
 /var/lib/ai-quota-monitor/account-a/workspace/
 /var/lib/ai-quota-monitor/account-b/codex-home/
 /var/lib/ai-quota-monitor/account-b/workspace/
+/var/lib/ai-quota-monitor/account-3/codex-home/
+/var/lib/ai-quota-monitor/account-3/workspace/
 ```
 
 The app clears `CODEX_API_KEY` and `OPENAI_API_KEY` in spawned Codex processes. ChatGPT account authentication is handled by the Codex runtime's device-code flow.
+
+## Account Lifecycle
+
+Existing installations retain the seeded `account-a` and `account-b` rows, schedules, auth homes, and workspaces. Migration `20260910_0006` only adds `sort_order` and nullable `archived_at` metadata, then backfills sort order from the existing rows.
+
+New accounts are created through `POST /accounts`. The service generates a stable slug such as `account-3`, creates isolated runtime directories, and stores a per-account schedule. `list_accounts()` excludes archived accounts by default; callers that need historical labels use `include_archived=True`.
+
+Archiving uses `POST /accounts/{account_id}/archive`. It sets `enabled=false` and `archived_at`, then reloads scheduler jobs and live listeners. Runtime files, telemetry snapshots, events, and anchor history are preserved.
 
 ## Authentication Backend
 

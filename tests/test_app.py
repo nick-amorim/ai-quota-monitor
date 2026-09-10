@@ -8,6 +8,7 @@ from ai_quota_monitor.database import create_database_engine, create_session_fac
 from ai_quota_monitor.main import create_app
 from ai_quota_monitor.models import Account, AppSetting
 from ai_quota_monitor.routes.dashboard import register_routes
+from ai_quota_monitor.services.accounts import list_accounts
 from ai_quota_monitor.services.anchors import AnchorTurnResult
 from ai_quota_monitor.services.codex_auth import CodexAccountInfo
 from ai_quota_monitor.services.events import record_event
@@ -220,6 +221,7 @@ def test_dashboard_shell_renders(tmp_path):
     assert "Refresh behavior" in response.text
     assert "Dashboard refresh seconds" in response.text
     assert "Usage polling minutes" in response.text
+    assert "Add account" in response.text
     assert "Scheduled anchors" in response.text
     assert "Timeline" in response.text
     assert "Next wake" in response.text
@@ -238,6 +240,8 @@ def test_dashboard_shell_renders(tmp_path):
     assert 'id="global-settings-drawer"' in response.text
     assert 'data-drawer-open="account-settings-drawer-1"' in response.text
     assert 'id="account-settings-drawer-1"' in response.text
+    assert "/accounts/1/archive" in response.text
+    assert "Archive account" in response.text
     assert 'hx-get="/partials/accounts"' in response.text
     assert 'hx-trigger="every 10s"' in response.text
     assert 'href="/monitor"' in response.text
@@ -315,6 +319,74 @@ def test_schedule_update_persists_after_restart(tmp_path):
     assert 'value="friday"' in response.text
     assert 'value="America/Fortaleza"' in response.text
     assert "Scheduled anchors" in response.text
+
+
+def test_add_account_route_creates_dynamic_account(tmp_path):
+    app = make_app(tmp_path)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/accounts",
+            data={
+                "name": "Work",
+                "enabled": "on",
+                "daily_anchor_enabled": "on",
+                "daily_anchor_time": "13:00",
+                "weekly_target_day": "thursday",
+                "weekly_target_time": "14:00",
+                "timezone": "America/Fortaleza",
+                "monday_enabled": "on",
+                "wednesday_enabled": "on",
+                "skip_if_window_active": "on",
+            },
+            follow_redirects=False,
+        )
+        monitor = client.get("/monitor")
+
+    assert response.status_code == 303
+    assert monitor.status_code == 200
+    assert "/monitor/account-3" in monitor.text
+    engine = create_database_engine(app.state.settings)
+    try:
+        session_factory = create_session_factory(engine)
+        with session_factory() as session:
+            accounts = list_accounts(session)
+            account = accounts[-1]
+            assert [account.slug for account in accounts] == [
+                "account-a",
+                "account-b",
+                "account-3",
+            ]
+            assert account.name == "Work"
+            assert account.schedule.daily_anchor_time.strftime("%H:%M") == "13:00"
+            assert account.schedule.weekly_target_day == "thursday"
+    finally:
+        engine.dispose()
+    assert (tmp_path / "account-3" / "codex-home").is_dir()
+    assert (tmp_path / "account-3" / "workspace").is_dir()
+
+
+def test_archive_account_route_hides_account_without_deleting_row(tmp_path):
+    app = make_app(tmp_path)
+
+    with TestClient(app) as client:
+        response = client.post("/accounts/1/archive", follow_redirects=False)
+        dashboard = client.get("/")
+
+    assert response.status_code == 303
+    assert 'id="account-settings-drawer-1"' not in dashboard.text
+    engine = create_database_engine(app.state.settings)
+    try:
+        session_factory = create_session_factory(engine)
+        with session_factory() as session:
+            visible = list_accounts(session)
+            all_accounts = list_accounts(session, include_archived=True)
+    finally:
+        engine.dispose()
+
+    assert [account.slug for account in visible] == ["account-b"]
+    assert [account.slug for account in all_accounts] == ["account-a", "account-b"]
+    assert all_accounts[0].archived_at is not None
 
 
 def test_auth_status_route_updates_account_metadata(tmp_path):

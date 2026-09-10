@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-This design system defines the visual language and interaction rules for **ai-quota-monitor**, a self-hosted operational dashboard for monitoring Codex quota windows, authentication state, schedules, anchor runs, events, and deployment health across two accounts.
+This design system defines the visual language and interaction rules for **ai-quota-monitor**, a self-hosted operational dashboard for monitoring Codex quota windows, authentication state, schedules, anchor runs, events, and deployment health across multiple accounts.
 
 The interface should feel like a **quiet precision instrument panel**: dependable, compact, legible, and calm under continuous monitoring. It must make the most important operational facts understandable at a glance without turning every value into a badge, card, or alert.
 
@@ -344,7 +344,7 @@ Verify at the actual browser viewport used by the device. At minimum, test:
 
 - 360 px or narrower layouts.
 - Short viewports around 280 px tall.
-- Two accounts with long labels.
+- Multiple accounts with long labels.
 - Missing telemetry.
 - Stale telemetry.
 - Error text.

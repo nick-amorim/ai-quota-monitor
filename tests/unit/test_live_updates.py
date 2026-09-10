@@ -8,7 +8,7 @@ from ai_quota_monitor.database import (
 )
 from ai_quota_monitor.migrations import run_migrations
 from ai_quota_monitor.models import Account, EventLog, UsageSnapshot
-from ai_quota_monitor.services.accounts import seed_defaults
+from ai_quota_monitor.services.accounts import archive_account, seed_defaults
 from ai_quota_monitor.services.app_server import CodexAppServerNotification
 from ai_quota_monitor.services.live_updates import RateLimitUpdateListener
 from ai_quota_monitor.services.telemetry import TelemetryService
@@ -117,6 +117,24 @@ def test_rate_limit_listener_ingests_notifications_and_reloads_clients(tmp_path)
 
         assert listener.active_account_ids == []
         assert client.closed is True
+    finally:
+        listener.shutdown()
+        engine.dispose()
+
+
+def test_rate_limit_listener_skips_archived_accounts(tmp_path):
+    engine, session_factory, listener = make_listener(tmp_path)
+
+    try:
+        with session_factory() as session:
+            account = session.get(Account, 1)
+            assert account is not None
+            archive_account(session, account)
+
+        listener.start()
+
+        assert listener.active_account_ids == []
+        assert FakeAppServerClient.instances == []
     finally:
         listener.shutdown()
         engine.dispose()
