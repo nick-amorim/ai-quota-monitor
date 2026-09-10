@@ -15,8 +15,8 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}">
-    <script src="{{ url_for('static', path='/app.js') }}" defer></script>
+    <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}?v={{ static_asset_version() }}">
+    <script src="{{ url_for('static', path='/app.js') }}?v={{ static_asset_version() }}" defer></script>
   </head>
   <body class="{{ body_class | default('') }}">
     <header class="appbar">

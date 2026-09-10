@@ -207,6 +207,8 @@ def test_dashboard_shell_renders(tmp_path):
     assert response.status_code == 200
     assert '<html lang="en" class="dark">' in response.text
     assert "ai-quota-monitor" in response.text
+    assert "/static/app.css?v=" in response.text
+    assert "/static/app.js?v=" in response.text
     assert "Quota window" in response.text
     assert "Account not logged in" in response.text
     assert "Account A" not in response.text
@@ -228,6 +230,9 @@ def test_dashboard_shell_renders(tmp_path):
     assert "data-system-update-check" in response.text
     assert "data-system-update-run" in response.text
     assert "data-system-update-result" in response.text
+    install_button_start = response.text.index("data-system-update-run")
+    install_button_end = response.text.index("</button>", install_button_start)
+    assert "disabled" not in response.text[install_button_start:install_button_end]
     assert 'data-theme-toggle' in response.text
     assert 'data-drawer-open="global-settings-drawer"' in response.text
     assert 'id="global-settings-drawer"' in response.text
