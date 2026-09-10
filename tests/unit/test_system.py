@@ -20,6 +20,7 @@ class FakeRunner:
         *,
         dirty: bool = False,
         fail_command: str | None = None,
+        fail_stderr: str = "failed",
         current_commit: str = "abc123",
         upstream_commit: str = "abc123",
         ancestor: bool = True,
@@ -27,6 +28,7 @@ class FakeRunner:
         self.commands: list[list[str]] = []
         self.dirty = dirty
         self.fail_command = fail_command
+        self.fail_stderr = fail_stderr
         self.current_commit = current_commit
         self.upstream_commit = upstream_commit
         self.ancestor = ancestor
@@ -34,7 +36,7 @@ class FakeRunner:
     def __call__(self, command: list[str], cwd: Path | None):
         self.commands.append(command)
         if self.fail_command and self.fail_command in command:
-            return CommandResult(command=command, returncode=1, stderr="failed")
+            return CommandResult(command=command, returncode=1, stderr=self.fail_stderr)
         if command == ["git", "status", "--porcelain"]:
             stdout = " M README.md\n" if self.dirty else ""
             return CommandResult(command=command, returncode=0, stdout=stdout)
@@ -97,7 +99,8 @@ def test_update_dry_run_plans_backup_and_shared_update_commands(tmp_path):
         "restart",
     ]
     assert ["git", "status", "--porcelain"] in runner.commands
-    assert result.steps[-1].command == ["systemctl", "restart", "ai-quota-monitor"]
+    assert result.steps[-1].status == "skipped"
+    assert "restart helper" in result.steps[-1].detail
 
 
 def test_check_update_reports_already_current_checkout(tmp_path):
@@ -156,6 +159,24 @@ def test_check_update_blocks_diverged_checkout(tmp_path):
     assert "diverged" in result.message
 
 
+def test_check_update_explains_git_object_permission_failure(tmp_path):
+    runner = FakeRunner(
+        fail_command="fetch",
+        fail_stderr=(
+            "error: insufficient permission for adding an object to repository "
+            "database .git/objects\nfatal: failed to write object\n"
+            "fatal: unpack-objects failed"
+        ),
+    )
+    settings = make_settings(tmp_path, deployment_mode="proxmox")
+
+    result = SystemService(settings, runner=runner).check_update()
+
+    assert result.can_update is False
+    assert result.message.startswith("Could not check for updates because")
+    assert "chown -R aiquota:aiquota" in result.steps[-1].detail
+
+
 def test_proxmox_web_update_uses_sudo_restart_helper(tmp_path, monkeypatch):
     helper_dir = tmp_path / "sbin"
     helper_dir.mkdir()
@@ -175,6 +196,56 @@ def test_proxmox_web_update_uses_sudo_restart_helper(tmp_path, monkeypatch):
 
     assert result.steps[-1].name == "restart"
     assert result.steps[-1].command == ["/usr/bin/sudo", "-n", str(helper)]
+
+
+def test_root_proxmox_update_repairs_ownership_before_restart(tmp_path, monkeypatch):
+    runner = FakeRunner()
+    settings = make_settings(tmp_path, deployment_mode="proxmox")
+    monkeypatch.setattr(system_module, "_is_root", lambda: True)
+    monkeypatch.setattr(
+        system_module.shutil,
+        "which",
+        lambda name: "/usr/bin/chown" if name == "chown" else None,
+    )
+
+    result = SystemService(settings, runner=runner).update(dry_run=True, restart=True)
+
+    assert [step.name for step in result.steps] == [
+        "backup",
+        "worktree",
+        "fetch",
+        "merge",
+        "install",
+        "migrate",
+        "ownership",
+        "restart",
+    ]
+    assert result.steps[-2].command == [
+        "/usr/bin/chown",
+        "-R",
+        "aiquota:aiquota",
+        str(settings.install_dir),
+        str(settings.data_dir),
+    ]
+    assert result.steps[-1].command == ["systemctl", "restart", "ai-quota-monitor"]
+
+
+def test_non_root_proxmox_update_skips_missing_restart_helper(tmp_path, monkeypatch):
+    runner = FakeRunner()
+    settings = make_settings(tmp_path, deployment_mode="proxmox")
+    monkeypatch.setattr(system_module, "_is_root", lambda: False)
+    monkeypatch.setattr(system_module.shutil, "which", lambda name: None)
+
+    result = SystemService(settings, runner=runner).update(dry_run=False, restart=True)
+
+    assert result.changed is True
+    assert result.message == (
+        "Update completed. Restart the service manually to load the new version."
+    )
+    assert result.steps[-1].name == "restart"
+    assert result.steps[-1].status == "skipped"
+    assert "systemctl restart ai-quota-monitor" in result.steps[-1].detail
+    assert ["systemctl", "restart", "ai-quota-monitor"] not in runner.commands
 
 
 def test_update_refuses_dirty_checkout_before_running_commands(tmp_path):

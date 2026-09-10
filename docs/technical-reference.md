@@ -204,9 +204,11 @@ The monitor view is dark-only and intentionally dense. It hides the normal app b
 
 ## Native Update Helpers
 
-Native/Proxmox installs keep `/opt/ai-quota-monitor` and `/var/lib/ai-quota-monitor` owned by the unprivileged `aiquota` service user. The installer adds `/opt/ai-quota-monitor` to Git's system `safe.directory` list so root-run reinstall/update commands can inspect the repository after ownership has been transferred to `aiquota`.
+Proxmox installs keep `/opt/ai-quota-monitor` and `/var/lib/ai-quota-monitor` owned by the unprivileged `aiquota` service user. The installer adds `/opt/ai-quota-monitor` to Git's system `safe.directory` list so root-run reinstall/update commands can inspect the repository after ownership has been transferred to `aiquota`.
 
 The administrative updater entry point is a root-owned wrapper at `/usr/local/bin/ai-quota-monitor-update`, with a `/usr/bin` symlink for minimal `pct enter` PATH environments. The wrapper sources `/etc/ai-quota-monitor.env` and then executes the virtualenv updater, so CLI updates use production database and data paths.
+
+Root-run Proxmox updates can create root-owned files in `.git/objects`, `.venv`, or migration caches. The installer `--update` mode repairs ownership before and after delegating to the updater, and the Python updater adds a Proxmox root-only `chown -R aiquota:aiquota /opt/ai-quota-monitor /var/lib/ai-quota-monitor` step before restart. Dashboard update checks run as `aiquota`, so this ownership repair is required for later `git fetch` checks to keep working.
 
 Dashboard-triggered real updates run as `aiquota`. Because that user should not receive broad systemd privileges, the installer creates a root-owned `/usr/local/sbin/ai-quota-monitor-restart` helper and a narrow sudoers rule allowing only that helper. `SystemService` uses `sudo -n` for this helper when a non-root Proxmox/native web update requests `--restart`; root CLI updates fall back to direct `systemctl restart`.
 
