@@ -53,6 +53,11 @@ class UpdateResult:
     changed: bool
     message: str
     steps: list[UpdateStep]
+    update_available: bool | None = None
+    can_update: bool | None = None
+    current_branch: str | None = None
+    current_commit: str | None = None
+    upstream_commit: str | None = None
 
 
 CommandRunner = Callable[[list[str], Path | None], CommandResult]
@@ -262,6 +267,199 @@ class SystemService:
             steps=steps,
         )
 
+    def check_update(self) -> UpdateResult:
+        deployment_mode = detect_deployment_mode(self.settings)
+        if deployment_mode == "docker":
+            return UpdateResult(
+                deployment_mode=deployment_mode,
+                supported=False,
+                dry_run=True,
+                changed=False,
+                message=(
+                    "Docker deployments update through Docker Compose, not "
+                    "dashboard installation."
+                ),
+                steps=[],
+                update_available=False,
+                can_update=False,
+            )
+
+        steps: list[UpdateStep] = []
+        remote_ref = f"{self.settings.update_remote}/{self.settings.update_branch}"
+
+        inside_result = self.runner(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            self._cwd(),
+        )
+        if inside_result.returncode != 0:
+            steps.append(
+                UpdateStep(
+                    name="git",
+                    status="failed",
+                    detail=_command_error(inside_result),
+                    command=inside_result.command,
+                )
+            )
+            return UpdateResult(
+                deployment_mode=deployment_mode,
+                supported=False,
+                dry_run=True,
+                changed=False,
+                message="This install is not a Git checkout.",
+                steps=steps,
+                update_available=False,
+                can_update=False,
+            )
+        steps.append(
+            UpdateStep(
+                name="git",
+                status="completed",
+                detail="Git checkout detected.",
+                command=inside_result.command,
+            )
+        )
+
+        fetch_result = self.runner(
+            [
+                "git",
+                "fetch",
+                "--quiet",
+                self.settings.update_remote,
+                self.settings.update_branch,
+            ],
+            self._cwd(),
+        )
+        if fetch_result.returncode != 0:
+            steps.append(
+                UpdateStep(
+                    name="fetch",
+                    status="failed",
+                    detail=_command_error(fetch_result),
+                    command=fetch_result.command,
+                )
+            )
+            return UpdateResult(
+                deployment_mode=deployment_mode,
+                supported=True,
+                dry_run=True,
+                changed=False,
+                message="Could not check for updates.",
+                steps=steps,
+                update_available=None,
+                can_update=False,
+            )
+        steps.append(
+            UpdateStep(
+                name="fetch",
+                status="completed",
+                detail=f"Fetched {self.settings.update_remote}/{self.settings.update_branch}.",
+                command=fetch_result.command,
+            )
+        )
+
+        current_branch = self._git_value(["git", "rev-parse", "--abbrev-ref", "HEAD"])
+        current_commit = self._git_value(["git", "rev-parse", "HEAD"])
+        upstream_commit = self._git_value(["git", "rev-parse", remote_ref])
+        if not current_commit or not upstream_commit:
+            steps.append(
+                UpdateStep(
+                    name="compare",
+                    status="failed",
+                    detail=f"Unable to compare HEAD with {remote_ref}.",
+                )
+            )
+            return UpdateResult(
+                deployment_mode=deployment_mode,
+                supported=True,
+                dry_run=True,
+                changed=False,
+                message="Could not compare local and upstream versions.",
+                steps=steps,
+                update_available=None,
+                can_update=False,
+                current_branch=current_branch,
+                current_commit=_short_commit(current_commit),
+                upstream_commit=_short_commit(upstream_commit),
+            )
+
+        dirty_result = self.runner(
+            ["git", "status", "--porcelain", "--untracked-files=no"],
+            self._cwd(),
+        )
+        if dirty_result.returncode != 0:
+            steps.append(
+                UpdateStep(
+                    name="worktree",
+                    status="failed",
+                    detail=_command_error(dirty_result),
+                    command=dirty_result.command,
+                )
+            )
+            return UpdateResult(
+                deployment_mode=deployment_mode,
+                supported=True,
+                dry_run=True,
+                changed=False,
+                message="Unable to inspect the Git worktree.",
+                steps=steps,
+                update_available=None,
+                can_update=False,
+                current_branch=current_branch,
+                current_commit=_short_commit(current_commit),
+                upstream_commit=_short_commit(upstream_commit),
+            )
+
+        changed_files = _changed_files(dirty_result.stdout)
+        dirty = bool(changed_files)
+        ancestor_result = self.runner(
+            ["git", "merge-base", "--is-ancestor", current_commit, upstream_commit],
+            self._cwd(),
+        )
+        update_available = current_commit != upstream_commit
+        diverged = bool(update_available and ancestor_result.returncode != 0)
+        can_update = bool(update_available and not dirty and not diverged)
+
+        if not update_available:
+            message = "Already up to date."
+        elif dirty:
+            message = "Update available, but tracked local changes are present."
+        elif diverged:
+            message = (
+                "Update available, but the local checkout has diverged from "
+                f"{remote_ref}."
+            )
+        else:
+            message = "Update available."
+
+        detail = (
+            f"Current {_short_commit(current_commit)}; "
+            f"latest {_short_commit(upstream_commit)}."
+        )
+        if dirty:
+            detail = f"{detail} Dirty files: {', '.join(changed_files)}."
+        steps.append(
+            UpdateStep(
+                name="compare",
+                status="completed" if can_update or not update_available else "skipped",
+                detail=detail,
+                command=ancestor_result.command,
+            )
+        )
+
+        return UpdateResult(
+            deployment_mode=deployment_mode,
+            supported=True,
+            dry_run=True,
+            changed=False,
+            message=message,
+            steps=steps,
+            update_available=update_available,
+            can_update=can_update,
+            current_branch=current_branch,
+            current_commit=_short_commit(current_commit),
+            upstream_commit=_short_commit(upstream_commit),
+        )
+
     def _cwd(self) -> Path:
         if self.settings.install_dir.exists():
             return self.settings.install_dir
@@ -354,6 +552,11 @@ def update_result_to_dict(result: UpdateResult) -> dict[str, object]:
         "dry_run": result.dry_run,
         "changed": result.changed,
         "message": result.message,
+        "update_available": result.update_available,
+        "can_update": result.can_update,
+        "current_branch": result.current_branch,
+        "current_commit": result.current_commit,
+        "upstream_commit": result.upstream_commit,
         "steps": [
             {
                 "name": step.name,
@@ -397,6 +600,24 @@ def _database_path(database_url: str) -> str | None:
 def _backup_path(settings: Settings) -> Path:
     timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     return resolve_backup_dir(settings) / f"ai-quota-monitor-{timestamp}.sqlite3"
+
+
+def _short_commit(value: str | None) -> str | None:
+    value = (value or "").strip()
+    return value[:8] if value else None
+
+
+def _changed_files(status: str) -> list[str]:
+    changed: list[str] = []
+    for line in status.splitlines():
+        if not line:
+            continue
+        path = line[3:].strip()
+        if " -> " in path:
+            path = path.rsplit(" -> ", 1)[-1]
+        if path:
+            changed.append(path)
+    return changed
 
 
 def _command_error(result: CommandResult) -> str:

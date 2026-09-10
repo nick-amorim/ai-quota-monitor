@@ -113,6 +113,14 @@ Updates must preserve `/var/lib/ai-quota-monitor`.
 
 ## Updates
 
+Dashboard flow:
+
+1. Open **Settings**.
+2. Click **Check update**.
+3. If an update is available and the checkout can fast-forward cleanly, click **Install update**.
+
+Real dashboard installs are disabled unless `AI_QUOTA_MONITOR_ENABLE_WEB_UPDATES=true`. Docker deployments should use Compose updates instead of dashboard installs.
+
 Preferred update command:
 
 ```bash

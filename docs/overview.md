@@ -50,6 +50,7 @@ The compact monitor is designed for a 3.7-inch Raspberry Pi display. It removes 
 | `/history` | Filterable event history |
 | `/health` | JSON health check |
 | `/api/system/info` | Deployment and update status |
+| `POST /api/system/update/check` | Fetch and compare local checkout against upstream |
 | `POST /api/system/update` | Dry-run or real native/Proxmox update |
 
 ## Runtime State

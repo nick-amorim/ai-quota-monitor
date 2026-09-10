@@ -17,6 +17,15 @@ async def system_info(request: Request) -> JSONResponse:
     return JSONResponse(content=system_info_to_dict(info))
 
 
+@router.post("/update/check")
+async def system_update_check(request: Request) -> JSONResponse:
+    result = await asyncio.to_thread(request.app.state.system_service.check_update)
+    http_status = status.HTTP_200_OK if result.supported else status.HTTP_409_CONFLICT
+    if any(step.status == "failed" for step in result.steps):
+        http_status = status.HTTP_409_CONFLICT
+    return JSONResponse(status_code=http_status, content=update_result_to_dict(result))
+
+
 @router.post("/update")
 async def system_update(request: Request) -> JSONResponse:
     payload = await _payload(request)

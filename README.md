@@ -139,6 +139,8 @@ Update an existing native/Proxmox install:
 ai-quota-monitor-update --yes --restart
 ```
 
+From the dashboard, open **Settings**, click **Check update**, then use **Install update** when the app reports that a clean fast-forward update is available. Real dashboard installs require `AI_QUOTA_MONITOR_ENABLE_WEB_UPDATES=true`; otherwise use the CLI command above.
+
 If a restricted shell does not include `/usr/local/bin` in `PATH`, the installer also exposes the updater from `/usr/bin` and the venv:
 
 ```bash

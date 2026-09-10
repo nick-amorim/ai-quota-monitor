@@ -134,6 +134,33 @@ class FakeSystemService:
             ],
         )
 
+    def check_update(self):
+        return UpdateResult(
+            deployment_mode="native",
+            supported=True,
+            dry_run=True,
+            changed=False,
+            message="Update available.",
+            update_available=True,
+            can_update=True,
+            current_branch="main",
+            current_commit="abc123",
+            upstream_commit="def456",
+            steps=[
+                UpdateStep(
+                    name="fetch",
+                    status="completed",
+                    detail="Fetched origin/main.",
+                    command=["git", "fetch", "--quiet", "origin", "main"],
+                ),
+                UpdateStep(
+                    name="compare",
+                    status="completed",
+                    detail="Current abc123; latest def456.",
+                ),
+            ],
+        )
+
 
 def make_app(tmp_path):
     return create_app(
@@ -196,8 +223,10 @@ def test_dashboard_shell_renders(tmp_path):
     assert "Next wake" in response.text
     assert "Mon-Fri 05:00, 10:00, 15:00, 20:00" in response.text
     assert "Deployment and updates" in response.text
-    assert "Check update plan" in response.text
-    assert "data-system-update-form" in response.text
+    assert "Check update" in response.text
+    assert "Install update" in response.text
+    assert "data-system-update-check" in response.text
+    assert "data-system-update-run" in response.text
     assert "data-system-update-result" in response.text
     assert 'data-theme-toggle' in response.text
     assert 'data-drawer-open="global-settings-drawer"' in response.text
@@ -556,13 +585,17 @@ def test_system_api_reports_update_status(tmp_path):
     assert response.json()["backup_dir"].endswith("backups")
 
 
-def test_system_update_api_allows_dry_run_but_blocks_real_web_update(tmp_path):
+def test_system_update_api_checks_updates_and_blocks_real_web_update(tmp_path):
     app = make_app(tmp_path)
 
     with TestClient(app) as client:
+        check = client.post("/api/system/update/check")
         dry_run = client.post("/api/system/update", data={"dry_run": "true"})
         real_update = client.post("/api/system/update", data={"dry_run": "false"})
 
+    assert check.status_code == 200
+    assert check.json()["update_available"] is True
+    assert check.json()["can_update"] is True
     assert dry_run.status_code == 200
     assert dry_run.json()["dry_run"] is True
     assert dry_run.json()["steps"][0]["name"] == "backup"
