@@ -88,6 +88,15 @@ configure_advanced() {
   NET_BRIDGE="$(prompt 'Network bridge' "$NET_BRIDGE")"
 }
 
+ensure_restart_helper_dependencies() {
+  export DEBIAN_FRONTEND=noninteractive
+  if ! command -v sudo >/dev/null 2>&1 || ! command -v visudo >/dev/null 2>&1; then
+    apt-get update
+    apt-get install -y sudo
+  fi
+  mkdir -p "$(dirname "$RESTART_HELPER")" "$(dirname "$SUDOERS_FILE")"
+}
+
 install_inside_current_system() {
   require_root
   export DEBIAN_FRONTEND=noninteractive
@@ -177,6 +186,7 @@ EOF
 }
 
 install_restart_helper() {
+  ensure_restart_helper_dependencies
   cat > "$RESTART_HELPER" <<EOF
 #!/usr/bin/env sh
 set -eu

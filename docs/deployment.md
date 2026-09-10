@@ -169,7 +169,7 @@ For older existing LXCs, rerun the installer once as root to refresh the command
 bash <(curl -fsSL https://raw.githubusercontent.com/nick-amorim/ai-quota-monitor/main/scripts/proxmox/install-lxc.sh) --existing
 ```
 
-The installer's `--update` mode performs the same local wrapper/helper refresh before delegating to the updater:
+The installer's `--update` mode performs the same local wrapper/helper refresh before delegating to the updater. It also ensures `sudo` and `/etc/sudoers.d` exist before installing the dashboard restart helper:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/nick-amorim/ai-quota-monitor/main/scripts/proxmox/install-lxc.sh) --update
