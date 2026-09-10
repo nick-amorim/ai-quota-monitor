@@ -191,3 +191,11 @@ Dashboard quota windows intentionally use compact labels:
 - weekly: remaining percent, `Reset Day HH:MM`, and `Anchor Weekday HH:MM`
 
 The monitor view is dark-only and intentionally dense. It hides the normal app bar, omits the timeline, and uses compact account labels, status dots, reset chips, and quota bars for a 3.7-inch Raspberry Pi display.
+
+## Native Update Helpers
+
+Native/Proxmox installs keep `/opt/ai-quota-monitor` and `/var/lib/ai-quota-monitor` owned by the unprivileged `aiquota` service user. The installer adds `/opt/ai-quota-monitor` to Git's system `safe.directory` list so root-run reinstall/update commands can inspect the repository after ownership has been transferred to `aiquota`.
+
+The administrative updater entry point is a root-owned wrapper at `/usr/local/bin/ai-quota-monitor-update`, with a `/usr/bin` symlink for minimal `pct enter` PATH environments. The wrapper sources `/etc/ai-quota-monitor.env` and then executes the virtualenv updater, so CLI updates use production database and data paths.
+
+Dashboard-triggered real updates run as `aiquota`. Because that user should not receive broad systemd privileges, the installer creates a root-owned `/usr/local/sbin/ai-quota-monitor-restart` helper and a narrow sudoers rule allowing only that helper. `SystemService` uses `sudo -n` for this helper when a non-root Proxmox/native web update requests `--restart`; root CLI updates fall back to direct `systemctl restart`.

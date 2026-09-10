@@ -195,11 +195,11 @@
           <p class="system-message">{{ system_info.update_message }}</p>
 
           <div class="system-actions">
-            <form method="post" action="/api/system/update">
+            <form method="post" action="/api/system/update" data-system-update-form>
               <input type="hidden" name="dry_run" value="true">
               <button type="submit" class="secondary-button">Check update plan</button>
             </form>
-            <form method="post" action="/api/system/update">
+            <form method="post" action="/api/system/update" data-system-update-form>
               <input type="hidden" name="dry_run" value="false">
               <input type="hidden" name="restart" value="true">
               <button
@@ -210,6 +210,7 @@
               </button>
             </form>
           </div>
+          <div class="system-update-result" data-system-update-result role="status" aria-live="polite" hidden></div>
         </section>
 
         <section class="settings-panel" aria-labelledby="global-runtime-title">
