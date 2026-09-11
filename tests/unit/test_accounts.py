@@ -18,6 +18,7 @@ from ai_quota_monitor.services.accounts import (
     get_account,
     list_accounts,
     seed_defaults,
+    set_account_anchor_paused,
     update_account_schedule,
 )
 from ai_quota_monitor.models import AppSetting
@@ -44,9 +45,9 @@ def test_seed_defaults_creates_two_accounts_with_expected_schedules(tmp_path):
     assert [account.slug for account in accounts] == ["account-a", "account-b"]
     assert [account.sort_order for account in accounts] == [1, 2]
     assert accounts[0].schedule.daily_anchor_time == time(5, 0)
-    assert accounts[0].schedule.weekly_target_day == "monday"
+    assert accounts[0].schedule.anchor_paused is False
     assert accounts[1].schedule.daily_anchor_time == time(9, 0)
-    assert accounts[1].schedule.weekly_target_day == "wednesday"
+    assert accounts[1].schedule.anchor_paused is False
     engine.dispose()
 
 
@@ -144,8 +145,6 @@ def test_create_account_adds_isolated_scheduled_account(tmp_path):
             settings,
             name="Work",
             daily_anchor_time=time(13, 0),
-            weekly_target_day="thursday",
-            weekly_target_time=time(14, 0),
             timezone="America/Fortaleza",
             active_weekdays={"monday", "wednesday"},
         )
@@ -156,8 +155,7 @@ def test_create_account_adds_isolated_scheduled_account(tmp_path):
     assert created is not None
     assert created.name == "Work"
     assert created.schedule.daily_anchor_time == time(13, 0)
-    assert created.schedule.weekly_target_day == "thursday"
-    assert created.schedule.weekly_target_time == time(14, 0)
+    assert created.schedule.anchor_paused is False
     assert created.schedule.timezone == "America/Fortaleza"
     assert created.schedule.monday_enabled is True
     assert created.schedule.tuesday_enabled is False
@@ -203,8 +201,6 @@ def test_update_account_schedule_persists(tmp_path):
             enabled=False,
             daily_anchor_enabled=False,
             daily_anchor_time=time(6, 30),
-            weekly_target_day="friday",
-            weekly_target_time=time(7, 45),
             timezone="America/Fortaleza",
             active_weekdays={"monday", "friday"},
             skip_if_window_active=False,
@@ -218,11 +214,29 @@ def test_update_account_schedule_persists(tmp_path):
     assert account.enabled is False
     assert account.schedule.daily_anchor_enabled is False
     assert account.schedule.daily_anchor_time == time(6, 30)
-    assert account.schedule.weekly_target_day == "friday"
-    assert account.schedule.weekly_target_time == time(7, 45)
     assert account.schedule.timezone == "America/Fortaleza"
     assert account.schedule.monday_enabled is True
     assert account.schedule.tuesday_enabled is False
     assert account.schedule.friday_enabled is True
     assert account.schedule.skip_if_window_active is False
+    engine.dispose()
+
+
+def test_set_account_anchor_paused_preserves_monitoring_schedule(tmp_path):
+    settings, engine, session_factory = make_session(tmp_path)
+
+    with session_factory() as session:
+        seed_defaults(session, settings)
+        account = list_accounts(session)[0]
+        set_account_anchor_paused(session, account, paused=True)
+        account_id = account.id
+
+    with session_factory() as session:
+        account = get_account(session, account_id)
+
+    assert account is not None
+    assert account.enabled is True
+    assert account.schedule.anchor_paused is True
+    assert account.schedule.daily_anchor_enabled is True
+    assert account.schedule.daily_anchor_time == time(5, 0)
     engine.dispose()

@@ -17,6 +17,7 @@ from ai_quota_monitor.services.accounts import (
     create_account,
     get_account,
     list_accounts,
+    set_account_anchor_paused,
     update_account_schedule,
 )
 from ai_quota_monitor.services.anchors import get_app_setting, update_app_setting
@@ -382,8 +383,6 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                 enabled=_checkbox(form, "enabled"),
                 daily_anchor_enabled=_checkbox(form, "daily_anchor_enabled"),
                 daily_anchor_time=_parse_time(_required(form, "daily_anchor_time")),
-                weekly_target_day=_required(form, "weekly_target_day"),
-                weekly_target_time=_parse_time(_required(form, "weekly_target_time")),
                 timezone=_required(form, "timezone"),
                 active_weekdays={
                     weekday for weekday in WEEKDAYS if _checkbox(form, f"{weekday}_enabled")
@@ -394,6 +393,44 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
         request.app.state.quota_scheduler.reload()
         request.app.state.rate_limit_listener.reload()
         return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+
+    async def set_anchor_pause(
+        account_id: int,
+        request: Request,
+        *,
+        paused: bool,
+    ) -> RedirectResponse:
+        session_factory = request.app.state.session_factory
+        with session_factory() as session:
+            account = get_account(session, account_id)
+            if account is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+            set_account_anchor_paused(session, account, paused=paused)
+            record_event(
+                session,
+                level="info",
+                category="account.anchor_pause",
+                message="Scheduled anchors paused" if paused else "Scheduled anchors resumed",
+                account_id=account.id,
+                payload={"paused": paused},
+            )
+
+        request.app.state.quota_scheduler.reload()
+        return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+
+    @router.post("/accounts/{account_id}/anchors/pause")
+    async def pause_account_anchors(
+        account_id: int,
+        request: Request,
+    ) -> RedirectResponse:
+        return await set_anchor_pause(account_id, request, paused=True)
+
+    @router.post("/accounts/{account_id}/anchors/resume")
+    async def resume_account_anchors(
+        account_id: int,
+        request: Request,
+    ) -> RedirectResponse:
+        return await set_anchor_pause(account_id, request, paused=False)
 
     @router.post("/accounts")
     async def add_account(request: Request) -> RedirectResponse:
@@ -409,8 +446,6 @@ def register_routes(templates: Jinja2Templates) -> APIRouter:
                     enabled=_checkbox(form, "enabled"),
                     daily_anchor_enabled=_checkbox(form, "daily_anchor_enabled"),
                     daily_anchor_time=_parse_time(_required(form, "daily_anchor_time")),
-                    weekly_target_day=_required(form, "weekly_target_day"),
-                    weekly_target_time=_parse_time(_required(form, "weekly_target_time")),
                     timezone=_required(form, "timezone"),
                     active_weekdays={
                         weekday

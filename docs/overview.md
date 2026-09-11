@@ -21,7 +21,7 @@ ai-quota-monitor is a self-hosted FastAPI application for monitoring multiple Ch
 - Manual anchor turns with persisted run history.
 - Codex app-server telemetry refresh with raw and normalized storage.
 - Live app-server quota update listener support.
-- APScheduler-backed daily and weekly scheduled anchors.
+- APScheduler-backed daily scheduled anchors with same-day five-hour wake calls.
 - Smart scheduled-anchor validation before spending an anchor turn.
 - Dashboard at `/`.
 - Compact monitor at `/monitor` and `/monitor/{account_slug}`.

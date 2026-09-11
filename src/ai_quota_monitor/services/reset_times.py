@@ -14,7 +14,6 @@ FIVE_HOUR_WINDOW_MINUTES = 300
 @dataclass(frozen=True)
 class ExpectedResetTimes:
     five_hour_reset_at: datetime | None
-    weekly_reset_at: datetime | None
 
 
 def expected_reset_times(
@@ -23,13 +22,13 @@ def expected_reset_times(
 ) -> ExpectedResetTimes:
     schedule = account.schedule
     if schedule is None:
-        return ExpectedResetTimes(None, None)
+        return ExpectedResetTimes(None)
 
     timezone = _timezone(schedule.timezone)
     local_now = _as_aware_utc(captured_at).astimezone(timezone)
 
     five_hour_reset_at = None
-    if schedule.daily_anchor_enabled:
+    if schedule.daily_anchor_enabled and not schedule.anchor_paused:
         active_days = [
             WEEKDAY_INDEXES[weekday]
             for weekday in WEEKDAYS
@@ -45,15 +44,7 @@ def expected_reset_times(
                 next_daily_anchor + timedelta(minutes=FIVE_HOUR_WINDOW_MINUTES)
             ).astimezone(UTC)
 
-    weekly_reset_at = _next_local_occurrence(
-        local_now,
-        [WEEKDAY_INDEXES[schedule.weekly_target_day]],
-        schedule.weekly_target_time,
-    )
-    if weekly_reset_at is not None:
-        weekly_reset_at = weekly_reset_at.astimezone(UTC)
-
-    return ExpectedResetTimes(five_hour_reset_at, weekly_reset_at)
+    return ExpectedResetTimes(five_hour_reset_at)
 
 
 def observed_reset_at(

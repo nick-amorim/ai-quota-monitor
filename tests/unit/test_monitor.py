@@ -35,7 +35,7 @@ def make_accounts(tmp_path):
     return engine, settings, accounts
 
 
-def test_monitor_view_reports_weekly_drift_and_today_timeline(tmp_path):
+def test_monitor_view_uses_observed_weekly_reset_and_today_timeline(tmp_path):
     engine, settings, accounts = make_accounts(tmp_path)
     now = datetime(2026, 1, 5, 1, 0, tzinfo=UTC)
     snapshot = UsageSnapshot(
@@ -79,7 +79,7 @@ def test_monitor_view_reports_weekly_drift_and_today_timeline(tmp_path):
         assert view.generated_clock_label == "01:00"
         assert account.display_label == "Account not logged in"
         assert account.daily_schedule_label == "Mon-Fri 05:00, 10:00, 15:00, 20:00"
-        assert account.weekly_schedule_label == "Mon 05:00"
+        assert account.anchors_paused is False
         assert account.next_wake_label == "Daily Mon 05:00"
         assert five_hour.short_label == "5h"
         assert five_hour.remaining_percent_label == "28.0%"
@@ -88,11 +88,11 @@ def test_monitor_view_reports_weekly_drift_and_today_timeline(tmp_path):
         assert five_hour.reset_time_label == "10:00"
         assert five_hour.reset_source_short_label == "obs"
         assert weekly.short_label == "7d"
-        assert weekly.configured_short_label == "Mon 05:00"
+        assert weekly.configured_short_label is None
+        assert weekly.expected_label == "Unknown"
         assert weekly.next_label == "Mon 06:00"
         assert five_hour.configured_label == "05:00 + 5h"
         assert five_hour.observed_label == "2026-01-05 10:00:00"
-        assert weekly.drift_label == "Weekly drift 60 min late"
         assert any(entry.label == "Daily anchor" for entry in view.timeline)
         assert any(entry.label == "Observed weekly reset" for entry in view.timeline)
     finally:

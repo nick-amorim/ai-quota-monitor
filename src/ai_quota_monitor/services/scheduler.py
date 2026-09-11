@@ -147,7 +147,11 @@ class QuotaScheduler:
             accounts = list_accounts(session)
 
         for account in accounts:
-            if not account.enabled or account.schedule is None:
+            if (
+                not account.enabled
+                or account.schedule is None
+                or account.schedule.anchor_paused
+            ):
                 continue
 
             if account.schedule.daily_anchor_enabled:
@@ -171,22 +175,6 @@ class QuotaScheduler:
                             replace_existing=True,
                         )
                         added += 1
-
-            scheduler.add_job(
-                self.run_anchor_job,
-                trigger=CronTrigger(
-                    day_of_week=AP_DAYS[account.schedule.weekly_target_day],
-                    hour=account.schedule.weekly_target_time.hour,
-                    minute=account.schedule.weekly_target_time.minute,
-                    timezone=_timezone(account.schedule.timezone),
-                ),
-                args=(account.id, "weekly"),
-                id=_job_id(account.id, "weekly"),
-                misfire_grace_time=runtime_config.misfire_grace_time,
-                name=f"{account.name} weekly anchor",
-                replace_existing=True,
-            )
-            added += 1
 
         self._record_event(
             level="info",

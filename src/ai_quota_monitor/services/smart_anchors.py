@@ -47,6 +47,22 @@ class SmartAnchorService:
 
     def run_scheduled_anchor(self, account_id: int, kind: str) -> SmartAnchorResult:
         account = self._load_account(account_id)
+        if account.schedule is not None and account.schedule.anchor_paused:
+            self._record_event(
+                level="info",
+                category="smart-anchor",
+                message=f"Scheduled {kind} anchor skipped because anchors are paused",
+                account_id=account_id,
+                payload={},
+            )
+            return SmartAnchorResult(
+                account_id=account_id,
+                kind=kind,
+                decision="skipped_paused",
+                reason="scheduled anchors are paused",
+                verification_status="skipped",
+            )
+
         pre_refresh = self._refresh_usage(account_id, "pre-anchor")
         pre_snapshot = pre_refresh.snapshot if pre_refresh is not None else None
 

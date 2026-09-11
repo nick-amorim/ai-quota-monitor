@@ -33,8 +33,8 @@ class QuotaWindowView:
     used_percent_label: str
     remaining_percent_value: float | None
     remaining_percent_label: str
-    configured_label: str
-    configured_short_label: str
+    configured_label: str | None
+    configured_short_label: str | None
     expected_label: str
     observed_label: str
     next_label: str
@@ -43,7 +43,6 @@ class QuotaWindowView:
     reset_source_label: str
     status_label: str
     status_class: str
-    drift_label: str | None = None
 
 
 @dataclass(frozen=True)
@@ -54,10 +53,10 @@ class AccountMonitorView:
     display_label: str
     secondary_label: str | None
     enabled_label: str
+    anchors_paused: bool
     auth_label: str
     account_display: str | None
     daily_schedule_label: str
-    weekly_schedule_label: str
     next_wake_label: str
     telemetry_error: str | None
     has_snapshot: bool
@@ -160,16 +159,13 @@ def build_current_day_timeline(
         account_name = account_labels.get(account.id, "Account not logged in")
         expected = expected_reset_times(account, now)
         snapshot = usage_by_account.get(account.id)
-        expected_five = (
-            snapshot.five_hour_expected_reset_at
-            if snapshot and snapshot.five_hour_expected_reset_at
-            else expected.five_hour_reset_at
-        )
-        expected_weekly = (
-            snapshot.weekly_expected_reset_at
-            if snapshot and snapshot.weekly_expected_reset_at
-            else expected.weekly_reset_at
-        )
+        expected_five = None
+        if account.schedule is None or not account.schedule.anchor_paused:
+            expected_five = (
+                snapshot.five_hour_expected_reset_at
+                if snapshot and snapshot.five_hour_expected_reset_at
+                else expected.five_hour_reset_at
+            )
         observed_five = (
             snapshot.five_hour_observed_reset_at
             if snapshot and snapshot.five_hour_observed_reset_at
@@ -201,17 +197,6 @@ def build_current_day_timeline(
                 day_start=day_start,
                 day_end=day_end,
                 entry_class="observed",
-            )
-        )
-        entries.extend(
-            _timeline_entry(
-                account_name=account_name,
-                label="Expected weekly reset",
-                at=expected_weekly,
-                timezone=timezone,
-                day_start=day_start,
-                day_end=day_end,
-                entry_class="expected",
             )
         )
         entries.extend(
@@ -255,12 +240,12 @@ def _account_view(
         slug=account.slug,
         display_label=_display_label(account),
         secondary_label=account.plan_type,
-        enabled_label="Enabled" if account.enabled else "Paused",
+        enabled_label=_anchor_status_label(account),
+        anchors_paused=bool(account.schedule and account.schedule.anchor_paused),
         auth_label=account.auth_status.replace("_", " ").title(),
         account_display=account.account_display,
         daily_schedule_label=_daily_schedule_label(account),
-        weekly_schedule_label=_weekly_schedule_label(account),
-        next_wake_label=_next_wake_label(scheduled_jobs, timezone),
+        next_wake_label=_next_wake_label(account, scheduled_jobs, timezone),
         telemetry_error=telemetry_error,
         has_snapshot=snapshot is not None,
         captured_label=_captured_label(snapshot, telemetry_error, timezone),
@@ -274,9 +259,13 @@ def _account_view(
                 snapshot,
                 used_percent=snapshot.five_hour_used_percent if snapshot else None,
                 expected_reset_at=(
-                    snapshot.five_hour_expected_reset_at
-                    if snapshot and snapshot.five_hour_expected_reset_at
-                    else expected.five_hour_reset_at
+                    (
+                        snapshot.five_hour_expected_reset_at
+                        if snapshot and snapshot.five_hour_expected_reset_at
+                        else expected.five_hour_reset_at
+                    )
+                    if account.schedule is None or not account.schedule.anchor_paused
+                    else None
                 ),
                 observed_reset_at=(
                     snapshot.five_hour_observed_reset_at
@@ -294,11 +283,7 @@ def _account_view(
                 account,
                 snapshot,
                 used_percent=snapshot.weekly_used_percent if snapshot else None,
-                expected_reset_at=(
-                    snapshot.weekly_expected_reset_at
-                    if snapshot and snapshot.weekly_expected_reset_at
-                    else expected.weekly_reset_at
-                ),
+                expected_reset_at=None,
                 observed_reset_at=(
                     snapshot.weekly_observed_reset_at
                     if snapshot and snapshot.weekly_observed_reset_at
@@ -337,14 +322,20 @@ def _window_view(
         used_percent_label=_percent_label(used_percent),
         remaining_percent_value=remaining_percent,
         remaining_percent_label=_percent_label(remaining_percent),
-        configured_label=_configured_label(account, key),
-        configured_short_label=_configured_short_label(account, key),
+        configured_label=_configured_label(account) if key == "five-hour" else None,
+        configured_short_label=(
+            _configured_short_label(account) if key == "five-hour" else None
+        ),
         expected_label=_format_datetime(expected_reset_at, timezone),
         observed_label=_format_datetime(observed_reset_at, timezone),
         next_label=_next_label(reset_at, timezone, key),
         reset_time_label=_format_clock(reset_at, timezone),
-        reset_source_short_label="obs" if observed_reset_at else "exp",
-        reset_source_label="Observed" if observed_reset_at else "Expected",
+        reset_source_short_label=(
+            "obs" if observed_reset_at else "exp" if expected_reset_at else "?"
+        ),
+        reset_source_label=(
+            "Observed" if observed_reset_at else "Expected" if expected_reset_at else "Unknown"
+        ),
         status_label=_window_status_label(
             snapshot,
             used_percent,
@@ -358,11 +349,6 @@ def _window_view(
             used_percent,
             stale=stale,
             telemetry_error=telemetry_error,
-        ),
-        drift_label=(
-            _drift_label(observed_reset_at, expected_reset_at)
-            if key == "weekly"
-            else None
         ),
     )
 
@@ -397,15 +383,10 @@ def _timeline_entry(
     ]
 
 
-def _configured_label(account: Account, key: str) -> str:
+def _configured_label(account: Account) -> str:
     schedule = account.schedule
     if schedule is None:
         return "No schedule"
-    if key == "weekly":
-        return (
-            f"{schedule.weekly_target_day.title()} "
-            f"{_format_time(schedule.weekly_target_time)}"
-        )
     if not schedule.daily_anchor_enabled:
         return "Daily anchor off"
     return f"{_format_time(schedule.daily_anchor_time)} + 5h"
@@ -421,14 +402,6 @@ def _daily_schedule_label(account: Account) -> str:
         for value in daily_anchor_times(schedule.daily_anchor_time)
     )
     return f"{days} {times}"
-
-
-def _weekly_schedule_label(account: Account) -> str:
-    schedule = account.schedule
-    if schedule is None:
-        return "Off"
-    day = DAY_SHORT_LABELS.get(schedule.weekly_target_day, schedule.weekly_target_day.title())
-    return f"{day} {_format_time(schedule.weekly_target_time)}"
 
 
 def _active_days_label(account: Account) -> str:
@@ -449,7 +422,15 @@ def _active_days_label(account: Account) -> str:
     return ", ".join(labels) if labels else "No days"
 
 
-def _next_wake_label(jobs: list[ScheduledAnchorJob], timezone: ZoneInfo) -> str:
+def _next_wake_label(
+    account: Account,
+    jobs: list[ScheduledAnchorJob],
+    timezone: ZoneInfo,
+) -> str:
+    if account.schedule is not None and account.schedule.anchor_paused:
+        return "Paused"
+    if account.schedule is None or not account.schedule.daily_anchor_enabled:
+        return "Off"
     next_jobs = [job for job in jobs if job.next_run_at is not None]
     if not next_jobs:
         return "None"
@@ -463,19 +444,23 @@ def _display_label(account: Account) -> str:
     return account.account_display or "Account not logged in"
 
 
-def _configured_short_label(account: Account, key: str) -> str:
+def _configured_short_label(account: Account) -> str:
     schedule = account.schedule
     if schedule is None:
         return "-"
-    if key == "weekly":
-        day = DAY_SHORT_LABELS.get(
-            schedule.weekly_target_day,
-            schedule.weekly_target_day.title(),
-        )
-        return f"{day} {_format_time(schedule.weekly_target_time)}"
     if not schedule.daily_anchor_enabled:
         return "Off"
     return _format_time(schedule.daily_anchor_time)
+
+
+def _anchor_status_label(account: Account) -> str:
+    if not account.enabled:
+        return "Monitoring off"
+    if account.schedule is not None and account.schedule.anchor_paused:
+        return "Anchors paused"
+    if account.schedule is None or not account.schedule.daily_anchor_enabled:
+        return "Anchors off"
+    return "Anchors active"
 
 
 def _window_status_label(
@@ -558,29 +543,6 @@ def _snapshot_status_class(
     if snapshot.parser_status in {"ok", "partial"}:
         return snapshot.parser_status
     return "error"
-
-
-def _drift_label(
-    observed_reset_at: datetime | None,
-    expected_reset_at: datetime | None,
-) -> str:
-    if observed_reset_at is None or expected_reset_at is None:
-        return "Weekly drift unknown"
-
-    drift_minutes = int(
-        round(
-            (
-                _as_aware_utc(observed_reset_at)
-                - _as_aware_utc(expected_reset_at)
-            ).total_seconds()
-            / 60
-        )
-    )
-    if abs(drift_minutes) <= 5:
-        return "Weekly drift on schedule"
-    if drift_minutes > 0:
-        return f"Weekly drift {drift_minutes} min late"
-    return f"Weekly drift {abs(drift_minutes)} min early"
 
 
 def _percent_label(value: float | None) -> str:
