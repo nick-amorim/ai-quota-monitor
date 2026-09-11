@@ -10,7 +10,7 @@ It helps make Codex quota windows visible and predictable without OpenAI API key
 - Shows a dark-first dashboard at `/` for account status, usage, events, schedules, and updates.
 - Provides a compact Raspberry Pi monitor at `/monitor` and `/monitor/{account_slug}`.
 - Refreshes connected-account usage automatically on the configured polling interval.
-- Runs manual anchors, weekly anchors, and derived same-day 5-hour wake anchors.
+- Runs manual anchors and derived same-day 5-hour wake anchors.
 - Stores raw telemetry, normalized usage snapshots, anchor history, and operational events in SQLite.
 - Supports Docker Compose and native/Proxmox systemd deployments.
 
@@ -202,7 +202,7 @@ Copy `.env.example` values into your deployment environment. Important settings:
 | `AI_QUOTA_MONITOR_LOG_FILE` | Rotating app log path |
 | `AI_QUOTA_MONITOR_DASHBOARD_REFRESH_INTERVAL_SECONDS` | Browser-only dashboard and monitor refresh interval |
 | `AI_QUOTA_MONITOR_TIMEZONE` | Default display/schedule timezone |
-| `AI_QUOTA_MONITOR_ENABLE_SCHEDULER` | Enable daily/weekly anchor jobs |
+| `AI_QUOTA_MONITOR_ENABLE_SCHEDULER` | Enable scheduled daily anchor jobs |
 | `AI_QUOTA_MONITOR_ENABLE_APP_SERVER_NOTIFICATIONS` | Enable live quota update listeners |
 | `AI_QUOTA_MONITOR_ENABLE_WEB_UPDATES` | Allow real web-triggered native/Proxmox updates |
 

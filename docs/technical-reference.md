@@ -36,7 +36,7 @@ src/ai_quota_monitor/
 | Table | Purpose |
 | --- | --- |
 | `accounts` | Account names, slugs, sort order, archive state, auth status, metadata |
-| `account_schedules` | Daily and weekly anchor schedule settings |
+| `account_schedules` | Daily anchor schedule settings and pause state |
 | `anchor_runs` | Manual and scheduled anchor history |
 | `usage_raw` | Raw app-server telemetry payloads |
 | `usage_snapshots` | Normalized quota windows and reset timestamps |
@@ -109,7 +109,7 @@ Normalized windows are identified by `windowDurationMins`:
 | 5-hour | 300 minutes |
 | Weekly | 10080 minutes |
 
-Observed reset timestamps from Codex are stored separately from expected reset timestamps derived from local schedules.
+Observed reset timestamps from Codex are stored separately from expected 5-hour reset timestamps derived from the local daily schedule. Weekly reset values are observational only.
 
 If app-server payloads are sparse, missing normalized fields carry forward the previous known value. If neither known window can be found, the raw payload is retained and the snapshot is marked `unsupported`.
 
@@ -153,7 +153,8 @@ Route handlers and background services log exceptions before returning user-faci
 On startup, APScheduler reads account schedules and creates:
 
 - one same-day 5-hour cadence of daily anchor jobs per enabled account when daily anchors are enabled;
-- one weekly target anchor job per enabled account.
+
+There is no weekly anchor job. Legacy weekly target columns are retained in existing SQLite databases for compatibility, but the application no longer reads or updates them.
 
 Daily cadence jobs are derived from `daily_anchor_time` by repeatedly adding the 300-minute 5-hour window until local midnight. A `05:00` start produces `05:00`, `10:00`, `15:00`, and `20:00`; a `09:00` start produces `09:00`, `14:00`, and `19:00`.
 
@@ -191,14 +192,14 @@ The dashboard is a dark-first operational interface with an optional persisted l
 
 Visible account labels use the Codex account email when available. Until an account is authenticated, the UI uses `Account not logged in` instead of internal seed labels such as Account A or Account B.
 
-Account cards show compact schedule context: all enabled daily weekdays, derived daily wake times, the weekly target, and the next scheduled wake call from APScheduler.
+Account cards show compact schedule context: all enabled daily weekdays, derived daily wake times, the pause state, and the next scheduled wake call from APScheduler.
 
 All frontend timestamps are formatted in the configured application timezone. SQLite may return UTC datetimes without timezone metadata, so display formatters treat naive database values as UTC before converting them to the local display timezone.
 
 Dashboard quota windows intentionally use compact labels:
 
 - 5-hour: remaining percent, `Reset HH:MM`, and `Anchor HH:MM`
-- weekly: remaining percent, `Reset Day HH:MM`, and `Anchor Weekday HH:MM`
+- weekly: remaining percent and Codex's observed reset time
 
 The monitor view is dark-only and intentionally dense. It hides the normal app bar, omits the timeline, and uses compact account labels, status dots, reset chips, and quota bars for a 3.7-inch Raspberry Pi display.
 

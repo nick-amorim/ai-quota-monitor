@@ -37,14 +37,12 @@ class AccountSeed:
     name: str
     slug: str
     daily_anchor_time: time
-    weekly_target_day: str
-    weekly_target_time: time
 
 
 def default_account_seeds(settings: Settings) -> tuple[AccountSeed, AccountSeed]:
     return (
-        AccountSeed("Account A", "account-a", time(5, 0), "monday", time(5, 0)),
-        AccountSeed("Account B", "account-b", time(9, 0), "wednesday", time(9, 0)),
+        AccountSeed("Account A", "account-a", time(5, 0)),
+        AccountSeed("Account B", "account-b", time(9, 0)),
     )
 
 
@@ -96,8 +94,9 @@ def seed_defaults(session: Session, settings: Settings) -> None:
                     account_id=account.id,
                     daily_anchor_enabled=True,
                     daily_anchor_time=seed.daily_anchor_time,
-                    weekly_target_day=seed.weekly_target_day,
-                    weekly_target_time=seed.weekly_target_time,
+                    # Existing installations retain these required legacy columns.
+                    weekly_target_day="monday",
+                    weekly_target_time=seed.daily_anchor_time,
                     timezone=settings.timezone,
                     monday_enabled=True,
                     tuesday_enabled=True,
@@ -121,15 +120,10 @@ def create_account(
     enabled: bool = True,
     daily_anchor_enabled: bool = True,
     daily_anchor_time: time = time(9, 0),
-    weekly_target_day: str = "monday",
-    weekly_target_time: time = time(9, 0),
     timezone: str | None = None,
     active_weekdays: set[str] | None = None,
     skip_if_window_active: bool = True,
 ) -> Account:
-    if weekly_target_day not in WEEKDAYS:
-        raise ValueError("weekly_target_day must be a weekday")
-
     if active_weekdays is None:
         active_weekdays = {"monday", "tuesday", "wednesday", "thursday", "friday"}
     invalid_weekdays = active_weekdays.difference(WEEKDAYS)
@@ -150,8 +144,9 @@ def create_account(
     account.schedule = AccountSchedule(
         daily_anchor_enabled=daily_anchor_enabled,
         daily_anchor_time=daily_anchor_time,
-        weekly_target_day=weekly_target_day,
-        weekly_target_time=weekly_target_time,
+        # No scheduler code reads these values after the weekly job removal.
+        weekly_target_day="monday",
+        weekly_target_time=daily_anchor_time,
         timezone=timezone or settings.timezone,
         skip_if_window_active=skip_if_window_active,
     )
@@ -212,15 +207,10 @@ def update_account_schedule(
     enabled: bool,
     daily_anchor_enabled: bool,
     daily_anchor_time: time,
-    weekly_target_day: str,
-    weekly_target_time: time,
     timezone: str,
     active_weekdays: set[str],
     skip_if_window_active: bool,
 ) -> Account:
-    if weekly_target_day not in WEEKDAYS:
-        raise ValueError("weekly_target_day must be a weekday")
-
     invalid_weekdays = active_weekdays.difference(WEEKDAYS)
     if invalid_weekdays:
         raise ValueError(f"Invalid weekdays: {', '.join(sorted(invalid_weekdays))}")
@@ -230,22 +220,35 @@ def update_account_schedule(
         account.schedule = AccountSchedule(
             daily_anchor_enabled=daily_anchor_enabled,
             daily_anchor_time=daily_anchor_time,
-            weekly_target_day=weekly_target_day,
-            weekly_target_time=weekly_target_time,
+            weekly_target_day="monday",
+            weekly_target_time=daily_anchor_time,
             timezone=timezone,
             skip_if_window_active=skip_if_window_active,
         )
     else:
         account.schedule.daily_anchor_enabled = daily_anchor_enabled
         account.schedule.daily_anchor_time = daily_anchor_time
-        account.schedule.weekly_target_day = weekly_target_day
-        account.schedule.weekly_target_time = weekly_target_time
         account.schedule.timezone = timezone
         account.schedule.skip_if_window_active = skip_if_window_active
 
     for weekday in WEEKDAYS:
         setattr(account.schedule, f"{weekday}_enabled", weekday in active_weekdays)
 
+    session.commit()
+    session.refresh(account)
+    return account
+
+
+def set_account_anchor_paused(
+    session: Session,
+    account: Account,
+    *,
+    paused: bool,
+) -> Account:
+    if account.schedule is None:
+        raise ValueError("Account does not have an anchor schedule")
+
+    account.schedule.anchor_paused = paused
     session.commit()
     session.refresh(account)
     return account

@@ -9,7 +9,7 @@
   {% set account_view = account_views.get(account.id) %}
   {% set login = login_attempts.get(account.id) %}
   {% set latest_anchor = latest_anchor_by_account.get(account.id) %}
-  <article class="account-panel account-panel--{{ account_view.snapshot_status_class if account_view else 'waiting' }}">
+  <article class="account-panel account-panel--{{ account_view.snapshot_status_class if account_view else 'waiting' }}{% if account_view and account_view.anchors_paused %} account-panel--paused{% endif %}">
     <header class="account-panel__header">
       <div class="account-identity">
         <span class="status-dot status-dot--{{ account_view.snapshot_status_class if account_view else 'waiting' }}" aria-hidden="true"></span>
@@ -23,7 +23,7 @@
         </div>
       </div>
       <div class="state-stack" aria-label="Account state">
-        <span>{{ "Enabled" if account.enabled else "Paused" }}</span>
+        <span>{{ account_view.enabled_label if account_view else "Monitoring off" }}</span>
         <span>{{ account.auth_status.replace("_", " ") | title }}</span>
       </div>
     </header>
@@ -57,10 +57,6 @@
           <dd>{{ account_view.daily_schedule_label if account_view else "Off" }}</dd>
         </div>
         <div>
-          <dt>Weekly</dt>
-          <dd>{{ account_view.weekly_schedule_label if account_view else "Off" }}</dd>
-        </div>
-        <div>
           <dt>Next wake</dt>
           <dd>{{ account_view.next_wake_label if account_view else "None" }}</dd>
         </div>
@@ -86,6 +82,15 @@
     </div>
 
     <div class="account-actions-row" aria-label="Actions for {{ account_view.display_label if account_view else 'Account not logged in' }}">
+      {% if account_view and account_view.anchors_paused %}
+      <form method="post" action="/accounts/{{ account.id }}/anchors/resume">
+        <button type="submit" class="secondary-button">Resume</button>
+      </form>
+      {% else %}
+      <form method="post" action="/accounts/{{ account.id }}/anchors/pause">
+        <button type="submit" class="secondary-button">Pause</button>
+      </form>
+      {% endif %}
       {% if account.auth_status == "connected" %}
       <form method="post" action="/accounts/{{ account.id }}/anchors/run">
         <button type="submit" class="primary-action">

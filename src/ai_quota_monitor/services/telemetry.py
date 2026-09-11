@@ -379,9 +379,7 @@ def _snapshot_from_normalized(
             weekly.reset_at if weekly else None,
             previous.weekly_reset_at if previous else None,
         ),
-        weekly_expected_reset_at=(
-            expected.weekly_reset_at if expected is not None else None
-        ),
+        weekly_expected_reset_at=None,
         weekly_observed_reset_at=weekly_observed_reset_at,
         parser_status=normalized.parser_status,
         parser_message=normalized.parser_message,

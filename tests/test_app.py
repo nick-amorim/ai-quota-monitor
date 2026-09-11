@@ -6,7 +6,7 @@ from fastapi.templating import Jinja2Templates
 from ai_quota_monitor.config import Settings
 from ai_quota_monitor.database import create_database_engine, create_session_factory
 from ai_quota_monitor.main import create_app
-from ai_quota_monitor.models import Account, AppSetting
+from ai_quota_monitor.models import Account, AppSetting, EventLog
 from ai_quota_monitor.routes.dashboard import register_routes
 from ai_quota_monitor.services.accounts import list_accounts
 from ai_quota_monitor.services.anchors import AnchorTurnResult
@@ -298,8 +298,6 @@ def test_schedule_update_persists_after_restart(tmp_path):
                 "enabled": "on",
                 "daily_anchor_enabled": "on",
                 "daily_anchor_time": "06:00",
-                "weekly_target_day": "friday",
-                "weekly_target_time": "07:00",
                 "timezone": "America/Fortaleza",
                 "monday_enabled": "on",
                 "friday_enabled": "on",
@@ -316,8 +314,8 @@ def test_schedule_update_persists_after_restart(tmp_path):
 
     assert response.status_code == 200
     assert 'value="06:00"' in response.text
-    assert 'value="friday"' in response.text
     assert 'value="America/Fortaleza"' in response.text
+    assert "weekly_target_day" not in response.text
     assert "Scheduled anchors" in response.text
 
 
@@ -332,8 +330,6 @@ def test_add_account_route_creates_dynamic_account(tmp_path):
                 "enabled": "on",
                 "daily_anchor_enabled": "on",
                 "daily_anchor_time": "13:00",
-                "weekly_target_day": "thursday",
-                "weekly_target_time": "14:00",
                 "timezone": "America/Fortaleza",
                 "monday_enabled": "on",
                 "wednesday_enabled": "on",
@@ -359,11 +355,49 @@ def test_add_account_route_creates_dynamic_account(tmp_path):
             ]
             assert account.name == "Work"
             assert account.schedule.daily_anchor_time.strftime("%H:%M") == "13:00"
-            assert account.schedule.weekly_target_day == "thursday"
+            assert account.schedule.anchor_paused is False
     finally:
         engine.dispose()
     assert (tmp_path / "account-3" / "codex-home").is_dir()
     assert (tmp_path / "account-3" / "workspace").is_dir()
+
+
+def test_pause_and_resume_account_anchors_reloads_only_that_schedule(tmp_path):
+    app = make_app(tmp_path)
+
+    with TestClient(app) as client:
+        before_pause = app.state.quota_scheduler.next_runs()
+        paused = client.post("/accounts/1/anchors/pause", follow_redirects=False)
+        dashboard = client.get("/")
+        paused_jobs = app.state.quota_scheduler.next_runs()
+        resumed = client.post("/accounts/1/anchors/resume", follow_redirects=False)
+        resumed_jobs = app.state.quota_scheduler.next_runs()
+
+    assert paused.status_code == 303
+    assert resumed.status_code == 303
+    assert any(job.account_id == 1 for job in before_pause)
+    assert not any(job.account_id == 1 for job in paused_jobs)
+    assert any(job.account_id == 2 for job in paused_jobs)
+    assert any(job.account_id == 1 for job in resumed_jobs)
+    assert "Anchors paused" in dashboard.text
+    assert "/accounts/1/anchors/resume" in dashboard.text
+    assert "Weekly day" not in dashboard.text
+    assert "Weekly time" not in dashboard.text
+
+    with app.state.session_factory() as session:
+        account = session.get(Account, 1)
+        assert account is not None
+        assert account.schedule is not None
+        assert account.schedule.anchor_paused is False
+        pause_events = [
+            event.message
+            for event in session.query(EventLog)
+            .filter(EventLog.account_id == 1)
+            .filter(EventLog.category == "account.anchor_pause")
+            .all()
+        ]
+
+    assert pause_events == ["Scheduled anchors paused", "Scheduled anchors resumed"]
 
 
 def test_archive_account_route_hides_account_without_deleting_row(tmp_path):

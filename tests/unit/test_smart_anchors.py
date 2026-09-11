@@ -123,6 +123,45 @@ def test_scheduled_anchor_skips_when_five_hour_window_is_active(tmp_path):
         engine.dispose()
 
 
+def test_scheduled_anchor_skips_when_account_anchors_are_paused(tmp_path):
+    now = datetime.now(UTC)
+    telemetry = FakeTelemetryBackend(
+        [
+            payload(
+                five_hour_reset_at=now - timedelta(minutes=10),
+                weekly_reset_at=now + timedelta(days=3),
+            )
+        ]
+    )
+    engine, session_factory, service, anchor_backend = make_service(tmp_path, telemetry)
+
+    try:
+        with session_factory() as session:
+            account = session.get(Account, 1)
+            assert account is not None
+            assert account.schedule is not None
+            account.schedule.anchor_paused = True
+            session.commit()
+
+        result = service.run_scheduled_anchor(1, "daily")
+
+        assert result.decision == "skipped_paused"
+        assert result.verification_status == "skipped"
+        assert anchor_backend.calls == 0
+        assert telemetry.payloads
+
+        with session_factory() as session:
+            assert session.query(AnchorRun).count() == 0
+            event = (
+                session.query(EventLog)
+                .filter(EventLog.message.like("%skipped because anchors are paused"))
+                .one()
+            )
+            assert event.account_id == 1
+    finally:
+        engine.dispose()
+
+
 def test_scheduled_anchor_sends_and_verifies_observed_reset_move(tmp_path):
     now = datetime.now(UTC)
     telemetry = FakeTelemetryBackend(

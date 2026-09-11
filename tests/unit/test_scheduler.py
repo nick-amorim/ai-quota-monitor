@@ -72,20 +72,14 @@ def make_scheduler(tmp_path, anchor_runner=None):
     return engine, session_factory, scheduler, anchor_runner
 
 
-def test_scheduler_creates_database_driven_daily_and_weekly_jobs(tmp_path):
+def test_scheduler_creates_database_driven_daily_jobs(tmp_path):
     engine, session_factory, scheduler, _ = make_scheduler(tmp_path)
 
     try:
         jobs = scheduler.next_runs()
-        job_keys = {(job.account_name, job.kind) for job in jobs}
         daily_jobs = [job for job in jobs if job.kind == "daily"]
 
-        assert job_keys == {
-            ("Account A", "daily"),
-            ("Account A", "weekly"),
-            ("Account B", "daily"),
-            ("Account B", "weekly"),
-        }
+        assert {job.kind for job in jobs} == {"daily"}
         assert len(daily_jobs) == 7
         assert {job.sequence for job in daily_jobs if job.account_id == 1} == {0, 1, 2, 3}
         assert {job.sequence for job in daily_jobs if job.account_id == 2} == {0, 1, 2}
@@ -114,8 +108,6 @@ def test_scheduler_reload_adds_created_accounts_and_skips_archived(tmp_path):
                 scheduler._settings,
                 name="Work",
                 daily_anchor_time=time(13, 0),
-                weekly_target_day="thursday",
-                weekly_target_time=time(14, 0),
             )
             created.auth_status = "connected"
             first = session.get(Account, 1)
@@ -130,7 +122,7 @@ def test_scheduler_reload_adds_created_accounts_and_skips_archived(tmp_path):
         assert "Account A" not in names
         assert "Account B" in names
         assert "Work" in names
-        assert any(job.account_name == "Work" and job.kind == "weekly" for job in jobs)
+        assert any(job.account_name == "Work" and job.kind == "daily" for job in jobs)
     finally:
         scheduler.shutdown()
         engine.dispose()
@@ -162,6 +154,27 @@ def test_scheduler_reload_reflects_schedule_changes_without_restart(tmp_path):
         assert daily.next_run_at is not None
         assert daily.next_run_at.hour == 6
         assert daily.next_run_at.minute == 30
+    finally:
+        scheduler.shutdown()
+        engine.dispose()
+
+
+def test_scheduler_reload_removes_jobs_for_paused_account(tmp_path):
+    engine, session_factory, scheduler, _ = make_scheduler(tmp_path)
+
+    try:
+        with session_factory() as session:
+            account = session.get(Account, 1)
+            assert account is not None
+            assert account.schedule is not None
+            account.schedule.anchor_paused = True
+            session.commit()
+
+        scheduler.reload()
+        jobs = scheduler.next_runs()
+
+        assert not any(job.account_id == 1 for job in jobs)
+        assert any(job.account_id == 2 for job in jobs)
     finally:
         scheduler.shutdown()
         engine.dispose()
@@ -206,7 +219,7 @@ def test_scheduled_anchor_job_logs_concurrency_skip(tmp_path):
     )
 
     try:
-        scheduler.run_anchor_job(1, "weekly")
+        scheduler.run_anchor_job(1, "daily")
 
         with session_factory() as session:
             event = (

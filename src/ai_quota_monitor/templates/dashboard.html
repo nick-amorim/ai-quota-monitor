@@ -244,22 +244,6 @@
               </label>
 
               <label>
-                <span>Weekly day</span>
-                <select name="weekly_target_day" required>
-                  {% for weekday in weekdays %}
-                  <option value="{{ weekday }}" {% if weekday == "monday" %}selected{% endif %}>
-                    {{ weekday | title }}
-                  </option>
-                  {% endfor %}
-                </select>
-              </label>
-
-              <label>
-                <span>Weekly time</span>
-                <input type="time" name="weekly_target_time" value="09:00" required>
-              </label>
-
-              <label>
                 <span>Timezone</span>
                 <input type="text" name="timezone" value="{{ timezone }}" required>
               </label>
@@ -369,7 +353,7 @@
           <form method="post" action="/accounts/{{ account.id }}/schedule" class="schedule-form">
             <label class="check-row">
               <input type="checkbox" name="enabled" {% if account.enabled %}checked{% endif %}>
-              <span>Account enabled</span>
+              <span>Monitoring enabled</span>
             </label>
 
             <div class="form-grid">
@@ -379,30 +363,6 @@
                   type="time"
                   name="daily_anchor_time"
                   value="{{ account.schedule.daily_anchor_time.strftime('%H:%M') }}"
-                  required
-                >
-              </label>
-
-              <label>
-                <span>Weekly day</span>
-                <select name="weekly_target_day" required>
-                  {% for weekday in weekdays %}
-                  <option
-                    value="{{ weekday }}"
-                    {% if account.schedule.weekly_target_day == weekday %}selected{% endif %}
-                  >
-                    {{ weekday | title }}
-                  </option>
-                  {% endfor %}
-                </select>
-              </label>
-
-              <label>
-                <span>Weekly time</span>
-                <input
-                  type="time"
-                  name="weekly_target_time"
-                  value="{{ account.schedule.weekly_target_time.strftime('%H:%M') }}"
                   required
                 >
               </label>

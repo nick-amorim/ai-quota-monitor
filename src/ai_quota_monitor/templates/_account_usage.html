@@ -42,7 +42,9 @@
       </div>
       <div class="usage-window__facts">
         <span>Reset {{ window.next_label }}</span>
+        {% if window.configured_short_label %}
         <span>Anchor {{ window.configured_short_label }}</span>
+        {% endif %}
       </div>
     </section>
     {% endfor %}

@@ -106,7 +106,7 @@ def test_refresh_account_usage_persists_raw_and_normalized_snapshot(tmp_path):
         UTC,
     )
     assert result.snapshot.five_hour_expected_reset_at is not None
-    assert result.snapshot.weekly_expected_reset_at is not None
+    assert result.snapshot.weekly_expected_reset_at is None
 
     with session_factory() as session:
         raw = session.query(UsageRaw).one()

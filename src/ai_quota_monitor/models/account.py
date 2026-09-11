@@ -54,6 +54,7 @@ class AccountSchedule(Base):
     account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), unique=True, nullable=False)
 
     daily_anchor_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    anchor_paused: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     daily_anchor_time: Mapped[time] = mapped_column(Time, nullable=False)
 
     weekly_target_day: Mapped[str] = mapped_column(String(16), nullable=False)
