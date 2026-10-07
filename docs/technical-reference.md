@@ -38,6 +38,7 @@ src/ai_quota_monitor/
 | `accounts` | Account names, slugs, sort order, archive state, auth status, metadata |
 | `account_schedules` | Daily anchor schedule settings and pause state |
 | `anchor_runs` | Manual and scheduled anchor history |
+| `daily_anchor_recoveries` | One pending provider-reset daily retry per account |
 | `usage_raw` | Raw app-server telemetry payloads |
 | `usage_snapshots` | Normalized quota windows and reset timestamps |
 | `events` | Scheduler, telemetry, update, and anchor events |
@@ -166,6 +167,17 @@ Missed jobs use `AI_QUOTA_MONITOR_MISSED_ANCHOR_POLICY`:
 | `skip_missed` | Skip jobs missed before the scheduler could run them |
 
 Smart scheduled anchors refresh telemetry before and after the anchor and record whether reset timing changed.
+
+When a daily anchor is blocked, `daily_anchor_recoveries` persists the source,
+observed reset instant, due instant, originating run/decision, and a generation
+token before APScheduler receives its one-shot recovery job. Startup and reload
+reconstruct that job. Fresh raw telemetry is consulted rather than inherited
+sparse snapshot fields; exhausted 5-hour and weekly windows select the later
+provider reset. The installed SDK currently turns failed turns into plain
+`RuntimeError` messages, so its strict terminal usage-limit text is a fallback
+only when no fresh structured reset is available. A generation token prevents a
+stale job from clearing a newer replacement, and one collision delay is bounded
+to one minute before cancellation.
 
 The same APScheduler instance also owns the automatic telemetry poll job, `telemetry:refresh-all`. It refreshes connected, enabled accounts only. The interval defaults to `AI_QUOTA_MONITOR_USAGE_POLL_INTERVAL_MINUTES`, then uses the persisted `usage_poll_interval_minutes` app setting when the scheduler reloads.
 

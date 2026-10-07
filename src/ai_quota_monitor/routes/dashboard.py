@@ -770,6 +770,7 @@ def _template_helpers(request: Request) -> dict[str, object]:
     timezone = request.app.state.settings.timezone
     return {
         "format_datetime": lambda value: format_local_datetime(value, timezone),
+        "format_datetime_in_timezone": format_local_datetime,
         "format_time": lambda value: format_local_time(value, timezone),
         "account_label": _account_label,
     }

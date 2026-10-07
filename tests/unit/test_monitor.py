@@ -156,3 +156,27 @@ def test_local_time_formatters_treat_naive_database_values_as_utc():
 
     assert format_local_time(value, "America/Recife") == "08:46"
     assert format_local_datetime(value, "America/Recife") == "2026-09-09 08:46:37"
+
+
+def test_timeline_uses_readable_daily_recovery_label(tmp_path):
+    engine, settings, accounts = make_accounts(tmp_path)
+    now = datetime(2026, 1, 5, 1, 0, tzinfo=UTC)
+    recovery = ScheduledAnchorJob(
+        id="anchor:1:daily_recovery",
+        account_id=1,
+        account_name="Account A",
+        kind="daily_recovery",
+        next_run_at=datetime(2026, 1, 5, 2, 0, tzinfo=UTC),
+        timezone="UTC",
+    )
+    try:
+        view = build_monitor_view(
+            accounts=accounts,
+            usage_by_account={},
+            scheduled_jobs=[recovery],
+            settings=settings,
+            now=now,
+        )
+        assert any(entry.label == "Daily recovery anchor" for entry in view.timeline)
+    finally:
+        engine.dispose()

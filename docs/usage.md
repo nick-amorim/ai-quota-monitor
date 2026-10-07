@@ -94,6 +94,17 @@ Smart scheduled-anchor validation:
 4. refreshes telemetry after the anchor;
 5. records whether the observed reset timestamp moved.
 
+When a daily anchor is skipped because a fresh 5-hour telemetry window is active,
+or a scheduled turn reports a Codex usage limit, the scheduler keeps one pending
+recovery for that account and retries one minute after the observed provider reset.
+The scheduler prefers fresh app-server telemetry (including a later exhausted
+weekly window) and only falls back to Codex's terminal `try again at 6:00 PM`
+wording in the account schedule timezone. A recovery is visible in **Scheduled
+anchors** as **Daily recovery**. It is cancelled if the account is paused,
+disabled, archived, disconnected, or no longer enabled for its due weekday.
+This mechanism follows reported availability; it does not create a reset or
+guarantee that the retry will succeed.
+
 ## Compact Monitor
 
 Open:
