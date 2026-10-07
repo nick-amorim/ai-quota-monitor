@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 from fastapi.testclient import TestClient
 from fastapi.templating import Jinja2Templates
 
@@ -7,6 +9,7 @@ from ai_quota_monitor.config import Settings
 from ai_quota_monitor.database import create_database_engine, create_session_factory
 from ai_quota_monitor.main import create_app
 from ai_quota_monitor.models import Account, AppSetting, EventLog
+from ai_quota_monitor.services.recovery import RecoveryReset
 from ai_quota_monitor.routes.dashboard import register_routes
 from ai_quota_monitor.services.accounts import list_accounts
 from ai_quota_monitor.services.anchors import AnchorTurnResult
@@ -711,3 +714,36 @@ def test_system_update_api_checks_updates_and_blocks_real_web_update(tmp_path):
     assert dry_run.json()["dry_run"] is True
     assert dry_run.json()["steps"][0]["name"] == "backup"
     assert real_update.status_code == 403
+
+
+def test_pending_recovery_appears_in_dashboard_scheduler_and_monitor(tmp_path):
+    app = make_app(tmp_path)
+
+    with TestClient(app) as client:
+        with app.state.session_factory() as session:
+            account = session.get(Account, 1)
+            assert account is not None and account.schedule is not None
+            account.auth_status = "connected"
+            account.schedule.timezone = "America/Recife"
+            for weekday in ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"):
+                setattr(account.schedule, f"{weekday}_enabled", True)
+            session.commit()
+        app.state.quota_scheduler._schedule_recovery(
+            1,
+            RecoveryReset(datetime.now(UTC) + timedelta(hours=2), "test", {}),
+            "test",
+            None,
+        )
+        dashboard = client.get("/")
+        scheduler = client.get("/partials/scheduler")
+        monitor = client.get("/partials/monitor")
+        accounts = client.get("/partials/accounts")
+
+    assert dashboard.status_code == 200
+    assert scheduler.status_code == 200
+    assert monitor.status_code == 200
+    assert accounts.status_code == 200
+    assert "Daily recovery" in dashboard.text
+    assert "Daily recovery" in scheduler.text
+    assert 'id="account-grid"' in accounts.text
+    assert "Daily_Recovery" not in dashboard.text

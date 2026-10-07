@@ -10,7 +10,7 @@ It helps make Codex quota windows visible and predictable without OpenAI API key
 - Shows a dark-first dashboard at `/` for account status, usage, events, schedules, and updates.
 - Provides a compact Raspberry Pi monitor at `/monitor` and `/monitor/{account_slug}`.
 - Refreshes connected-account usage automatically on the configured polling interval.
-- Runs manual anchors and derived same-day 5-hour wake anchors.
+- Runs manual anchors and derived same-day 5-hour wake anchors, with one persisted reset-based daily recovery per account when Codex reports quota blocking.
 - Stores raw telemetry, normalized usage snapshots, anchor history, and operational events in SQLite.
 - Supports Docker Compose and native/Proxmox systemd deployments.
 

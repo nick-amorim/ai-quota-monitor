@@ -20,10 +20,10 @@
     <div class="activity-item">
       <span class="status-dot status-dot--warning" aria-hidden="true"></span>
       <div>
-        <strong>{{ job.kind | title }}</strong>
+        <strong>{{ "Daily recovery" if job.kind == "daily_recovery" else job.kind | title }}</strong>
         <span>{{ account_labels_by_id.get(job.account_id, "Account not logged in") }}</span>
       </div>
-      <time>{{ format_datetime(job.next_run_at) if job.next_run_at else "-" }}</time>
+      <time>{{ format_datetime_in_timezone(job.next_run_at, job.timezone) if job.next_run_at else "-" }}</time>
     </div>
     {% endfor %}
   </div>

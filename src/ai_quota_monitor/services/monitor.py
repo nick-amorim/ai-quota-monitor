@@ -146,7 +146,7 @@ def build_current_day_timeline(
         entries.extend(
             _timeline_entry(
                 account_name=account_labels.get(job.account_id, "Account not logged in"),
-                label=f"{job.kind.title()} anchor",
+                label=f"{_scheduled_job_label(job.kind)} anchor",
                 at=job.next_run_at,
                 timezone=timezone,
                 day_start=day_start,
@@ -217,6 +217,10 @@ def build_current_day_timeline(
             key=lambda entry: (entry.minute_percent, entry.account_name, entry.label),
         )
     )
+
+
+def _scheduled_job_label(kind: str) -> str:
+    return "Daily recovery" if kind == "daily_recovery" else kind.title()
 
 
 def _account_view(
@@ -437,7 +441,7 @@ def _next_wake_label(
 
     job = min(next_jobs, key=lambda item: _as_aware_utc(item.next_run_at))
     local_run = _as_aware_utc(job.next_run_at).astimezone(timezone)
-    return f"{job.kind.title()} {local_run.strftime('%a %H:%M')}"
+    return f"{_scheduled_job_label(job.kind)} {local_run.strftime('%a %H:%M')}"
 
 
 def _display_label(account: Account) -> str:
